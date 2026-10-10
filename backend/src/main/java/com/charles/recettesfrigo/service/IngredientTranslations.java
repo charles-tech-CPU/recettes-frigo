@@ -1,5 +1,6 @@
 package com.charles.recettesfrigo.service;
 
+import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Map;
 
@@ -148,12 +149,22 @@ public final class IngredientTranslations {
      * renvoye tel quel (normalise), en dernier recours.
      */
     public static String toEnglishQueryTerm(String frenchName) {
-        String normalized = frenchName.trim().toLowerCase(Locale.FRENCH);
+        String normalized = normalize(frenchName);
         String translated = FR_TO_EN.get(normalized);
         return translated != null ? translated : normalized.replace(' ', '_');
     }
 
     public static boolean isKnown(String frenchName) {
-        return FR_TO_EN.containsKey(frenchName.trim().toLowerCase(Locale.FRENCH));
+        return FR_TO_EN.containsKey(normalize(frenchName));
+    }
+
+    /**
+     * Les cles du dictionnaire sont sans accents ni ligatures : "Bœuf haché",
+     * "Épinards" ou "huile d’olive" (apostrophe typographique) doivent les retrouver.
+     */
+    static String normalize(String frenchName) {
+        String lower = frenchName.trim().toLowerCase(Locale.FRENCH);
+        String ascii = lower.replace("œ", "oe").replace("æ", "ae").replace('’', '\'');
+        return Normalizer.normalize(ascii, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 }

@@ -2,14 +2,19 @@ package com.charles.recettesfrigo.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.charles.recettesfrigo.domain.FridgeItem;
+import com.charles.recettesfrigo.dto.CustomRecipeDto;
 import com.charles.recettesfrigo.dto.RecipeDetailDto;
+import com.charles.recettesfrigo.dto.RecipeDetailDto.IngredientLine;
 import com.charles.recettesfrigo.dto.RecipeSuggestionDto;
 import com.charles.recettesfrigo.repository.FridgeItemRepository;
+import com.charles.recettesfrigo.service.RecipeTranslationService.TranslatedMeal;
 import com.charles.recettesfrigo.service.TheMealDbClient.MealSummary;
 import com.charles.recettesfrigo.service.TheMealDbClient.TheMealDbUnavailableException;
 import jakarta.persistence.EntityNotFoundException;
@@ -30,6 +35,12 @@ class RecipeSuggestionServiceTest {
     @Mock
     private TheMealDbClient client;
 
+    @Mock
+    private RecipeTranslationService translationService;
+
+    @Mock
+    private CustomRecipeService customRecipeService;
+
     @InjectMocks
     private RecipeSuggestionService service;
 
@@ -43,6 +54,31 @@ class RecipeSuggestionServiceTest {
         return new MealSummary(id, title, "https://img/" + id + ".jpg");
     }
 
+    /** Traduction "neutre" : la recette reste en anglais, comme sans cle DeepL. */
+    private void noTranslation() {
+        when(translationService.translate(anyString(), any())).thenAnswer(inv -> {
+            Map<String, Object> meal = inv.getArgument(1);
+            return new TranslatedMeal(
+                    (String) meal.get("strMeal"), null, null, null, MealIngredientParser.extract(meal), false);
+        });
+    }
+
+    private static CustomRecipeDto myRecipe(long id, String title, boolean thermomix, String... ingredients) {
+        return new CustomRecipeDto(
+                id,
+                title,
+                null,
+                null,
+                null,
+                thermomix,
+                null,
+                null,
+                java.util.Arrays.stream(ingredients)
+                        .map(name -> new CustomRecipeDto.Ingredient(name, null))
+                        .toList(),
+                List.of());
+    }
+
     @Test
     void frigoVideAucuneSuggestion() {
         when(fridgeItemRepository.findAll()).thenReturn(List.of());
@@ -53,25 +89,86 @@ class RecipeSuggestionServiceTest {
 
     @Test
     void lesRecettesSontTrieesParNombreDIngredientsDuFrigoEtLesManquantsCalcules() {
+        noTranslation();
         when(fridgeItemRepository.findAll()).thenReturn(List.of(item("Poulet"), item("Riz")));
         when(client.filterByIngredient("chicken")).thenReturn(List.of(summary("1", "Curry"), summary("2", "Soup")));
         when(client.filterByIngredient("rice")).thenReturn(List.of(summary("1", "Curry")));
         when(client.lookupById("1"))
                 .thenReturn(Map.of(
+                        "strMeal", "Curry",
                         "strIngredient1", "Chicken Breast",
                         "strIngredient2", "Rice",
-                        "strIngredient3", "Coconut Milk"));
-        when(client.lookupById("2")).thenReturn(Map.of("strIngredient1", "Chicken", "strIngredient2", "Water"));
+                        "strIngredient3", "Coconut Milk",
+                        "strIngredient4", "Coconut Milk"));
+        when(client.lookupById("2"))
+                .thenReturn(Map.of("strMeal", "Soup", "strIngredient1", "Chicken", "strIngredient2", "Water"));
 
         List<RecipeSuggestionDto> result = service.suggestFromFridge(12);
 
-        assertThat(result).extracting(RecipeSuggestionDto::mealId).containsExactly("1", "2");
+        assertThat(result).extracting(RecipeSuggestionDto::id).containsExactly("1", "2");
         RecipeSuggestionDto curry = result.get(0);
+        assertThat(curry.source()).isEqualTo("mealdb");
         assertThat(curry.title()).isEqualTo("Curry");
         assertThat(curry.matchedIngredientCount()).isEqualTo(2);
-        assertThat(curry.totalIngredientCount()).isEqualTo(3);
+        assertThat(curry.totalIngredientCount()).isEqualTo(4);
+        // un ingredient cite deux fois n'apparait qu'une fois dans les manquants
         assertThat(curry.missingIngredients()).containsExactly("Coconut Milk");
         assertThat(result.get(1).missingIngredients()).containsExactly("Water");
+    }
+
+    @Test
+    void titreEtIngredientsManquantsSontAffichesTraduits() {
+        when(fridgeItemRepository.findAll()).thenReturn(List.of(item("Poulet")));
+        when(client.filterByIngredient("chicken")).thenReturn(List.of(summary("1", "Chicken Soup")));
+        Map<String, Object> meal = Map.of("strIngredient1", "Chicken", "strIngredient2", "Water");
+        when(client.lookupById("1")).thenReturn(meal);
+        when(translationService.translate("1", meal))
+                .thenReturn(new TranslatedMeal(
+                        "Soupe de poulet",
+                        "Poulet",
+                        null,
+                        null,
+                        List.of(new IngredientLine("Poulet", ""), new IngredientLine("Eau", "")),
+                        true));
+
+        RecipeSuggestionDto soup = service.suggestFromFridge(12).get(0);
+
+        assertThat(soup.title()).isEqualTo("Soupe de poulet");
+        assertThat(soup.missingIngredients()).containsExactly("Eau");
+    }
+
+    @Test
+    void lesRecettesPersoSontClasseesAvecLesAutres() {
+        noTranslation();
+        when(fridgeItemRepository.findAll()).thenReturn(List.of(item("Poulet"), item("Carottes"), item("Riz")));
+        when(customRecipeService.findAll())
+                .thenReturn(List.of(
+                        myRecipe(7L, "Poulet aux carottes", true, "Blanc de poulet", "Carotte râpée", "Crème"),
+                        myRecipe(8L, "Tarte aux pommes", false, "Pommes", "Pâte brisée")));
+        when(client.filterByIngredient(anyString())).thenReturn(List.of());
+        when(client.filterByIngredient("chicken")).thenReturn(List.of(summary("1", "Soup")));
+        when(client.lookupById("1")).thenReturn(Map.of("strMeal", "Soup", "strIngredient1", "Chicken"));
+
+        List<RecipeSuggestionDto> result = service.suggestFromFridge(12);
+
+        // la tarte n'utilise rien du frigo : absente ; la recette perso (2 ingredients) passe devant
+        assertThat(result).extracting(RecipeSuggestionDto::id).containsExactly("7", "1");
+        RecipeSuggestionDto mine = result.get(0);
+        assertThat(mine.source()).isEqualTo("perso");
+        assertThat(mine.thermomix()).isTrue();
+        assertThat(mine.matchedIngredientCount()).isEqualTo(2);
+        assertThat(mine.missingIngredients()).containsExactly("Crème");
+    }
+
+    @Test
+    void sansTheMealDbLesRecettesPersoRestentProposees() {
+        when(fridgeItemRepository.findAll()).thenReturn(List.of(item("Poulet")));
+        when(customRecipeService.findAll()).thenReturn(List.of(myRecipe(7L, "Poulet rôti", false, "Poulet")));
+        when(client.filterByIngredient(anyString())).thenThrow(new TheMealDbUnavailableException("ko", null));
+
+        assertThat(service.suggestFromFridge(12))
+                .extracting(RecipeSuggestionDto::id)
+                .containsExactly("7");
     }
 
     @Test
@@ -85,7 +182,7 @@ class RecipeSuggestionServiceTest {
     }
 
     @Test
-    void theMealDbInjoignablePourTousLesIngredients() {
+    void theMealDbInjoignableEtAucuneRecettePerso() {
         when(fridgeItemRepository.findAll()).thenReturn(List.of(item("Poulet")));
         when(client.filterByIngredient(anyString())).thenThrow(new TheMealDbUnavailableException("ko", null));
 
@@ -93,20 +190,26 @@ class RecipeSuggestionServiceTest {
     }
 
     @Test
-    void detailDUneRecette() {
-        when(client.lookupById("52772"))
-                .thenReturn(Map.of(
-                        "strMeal", "Teriyaki Chicken Casserole",
-                        "strCategory", "Chicken",
-                        "strIngredient1", "soy sauce",
-                        "strMeasure1", "3/4 cup"));
+    void detailDUneRecetteTraduite() {
+        Map<String, Object> meal = Map.of("strMeal", "Teriyaki Chicken Casserole", "strMealThumb", "https://img");
+        when(client.lookupById("52772")).thenReturn(meal);
+        when(translationService.translate(eq("52772"), any()))
+                .thenReturn(new TranslatedMeal(
+                        "Gratin de poulet teriyaki",
+                        "Poulet",
+                        "Japonais",
+                        "Préchauffer le four.",
+                        List.of(new IngredientLine("sauce soja", "3/4 tasse")),
+                        true));
 
         RecipeDetailDto detail = service.findDetail("52772");
 
-        assertThat(detail.title()).isEqualTo("Teriyaki Chicken Casserole");
-        assertThat(detail.category()).isEqualTo("Chicken");
+        assertThat(detail.title()).isEqualTo("Gratin de poulet teriyaki");
+        assertThat(detail.area()).isEqualTo("Japonais");
+        assertThat(detail.thumbnailUrl()).isEqualTo("https://img");
         assertThat(detail.videoUrl()).isNull();
-        assertThat(detail.ingredients()).containsExactly(new RecipeDetailDto.IngredientLine("soy sauce", "3/4 cup"));
+        assertThat(detail.translated()).isTrue();
+        assertThat(detail.ingredients()).containsExactly(new IngredientLine("sauce soja", "3/4 tasse"));
     }
 
     @Test

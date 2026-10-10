@@ -24,6 +24,17 @@ a { color: #7fd0ff; text-decoration: none; }
 }
 .topbar nav a.router-link-active { background: #2b6cb0; }
 
+/* Lien de retour au portail-foyer, tout a gauche de l'en-tete : discret mais visible */
+.portal-link {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  min-height: 40px; padding: 6px 14px;
+  border: 1px solid #37485a; border-radius: 999px;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  color: #9fb0c0;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.portal-link:hover { color: #7fd0ff; background: #22303f; border-color: #2b6cb0; }
+
 main { padding: 18px 20px; max-width: 1200px; margin: 0 auto; }
 
 button {
@@ -74,20 +85,6 @@ label { display: block; font-size: 13px; color: #9fb0c0; margin: 10px 0 6px; }
   background: #1f3a2b; color: #4ade80; margin-bottom: 4px;
 }
 .recipe-card .missing { font-size: 12px; color: #9fb0c0; }
-
-/* Liste du frigo */
-.fridge-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-.fridge-item-card {
-  background: #1a2330; border: 1px solid #2a3644; border-radius: 10px;
-  padding: 14px; display: flex; justify-content: space-between; align-items: center;
-}
-.fridge-item-card .name { font-weight: 600; }
-.fridge-item-card .meta { font-size: 12px; color: #9fb0c0; }
 
 .empty-hint { color: #9fb0c0; font-size: 15px; text-align: center; padding: 40px 0; }
 

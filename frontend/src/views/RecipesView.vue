@@ -4,8 +4,7 @@
     <button class="secondary" :disabled="loading" @click="load">{{ loading ? 'Recherche...' : '↻ Actualiser' }}</button>
   </div>
   <p style="color:#9fb0c0">
-    Classées par nombre d'ingrédients de ton frigo qu'elles utilisent.
-    Les titres et instructions viennent de TheMealDB, en anglais.
+    Tes recettes et celles de TheMealDB, classées par nombre d'ingrédients de ton frigo qu'elles utilisent.
   </p>
 
   <p v-if="error" style="color:#ff6b6b">{{ error }}</p>
@@ -14,10 +13,15 @@
   </p>
 
   <div class="recipe-grid">
-    <div v-for="r in suggestions" :key="r.mealId" class="recipe-card" @click="openDetail(r.mealId)">
-      <img :src="r.thumbnailUrl" :alt="r.title" />
+    <div v-for="r in suggestions" :key="`${r.source}:${r.id}`" class="recipe-card" @click="openDetail(r)">
+      <img v-if="r.thumbnailUrl" :src="r.thumbnailUrl" :alt="r.title" />
+      <div v-else class="no-image"><CategoryIcon name="autres" /></div>
       <div class="content">
-        <div class="match-badge">{{ r.matchedIngredientCount }} ingrédient(s) du frigo</div>
+        <div class="badges">
+          <span class="match-badge">{{ r.matchedIngredientCount }} ingrédient(s) du frigo</span>
+          <span v-if="r.source === 'perso'" class="mine-badge">Ma recette</span>
+          <span v-if="r.thermomix" class="tm-badge">Thermomix</span>
+        </div>
         <div class="title">{{ r.title }}</div>
         <div v-if="r.missingIngredients.length" class="missing">
           Manque : {{ r.missingIngredients.slice(0, 3).join(', ') }}<span v-if="r.missingIngredients.length > 3">...</span>
@@ -27,39 +31,15 @@
     </div>
   </div>
 
-  <div v-if="detail" class="overlay" @click.self="detail = null">
-    <div class="panel">
-      <div class="panel-header">
-        <h2 style="margin:0">{{ detail.title }}</h2>
-        <button class="secondary" @click="detail = null">✕</button>
-      </div>
-      <img :src="detail.thumbnailUrl" :alt="detail.title" />
-      <div class="inline">
-        <span v-if="detail.category" class="match-badge">{{ detail.category }}</span>
-        <span v-if="detail.area" class="match-badge">{{ detail.area }}</span>
-      </div>
-
-      <h3>Ingrédients</h3>
-      <div v-for="(line, i) in detail.ingredients" :key="i" class="ingredient-line">
-        <span>{{ line.ingredient }}</span>
-        <span style="color:#9fb0c0">{{ line.measure }}</span>
-      </div>
-
-      <h3>Instructions</h3>
-      <p class="instructions">{{ detail.instructions }}</p>
-      <p class="lang-note">Titre et instructions fournis en anglais par TheMealDB.</p>
-
-      <div class="inline" style="margin-top:14px">
-        <a v-if="detail.videoUrl" :href="detail.videoUrl" target="_blank"><button type="button">▶ Vidéo</button></a>
-        <a v-if="detail.sourceUrl" :href="detail.sourceUrl" target="_blank"><button type="button" class="secondary">Source</button></a>
-      </div>
-    </div>
-  </div>
+  <RecipePanel v-if="detail" :recipe="detail" @close="detail = null" />
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
 import api from '../services/api'
+import CategoryIcon from '../components/CategoryIcon.vue'
+import RecipePanel from '../components/RecipePanel.vue'
+import { fromCustom, fromMealDb } from '../recipes'
 
 const suggestions = ref([])
 const detail = ref(null)
@@ -78,9 +58,11 @@ async function load() {
   }
 }
 
-async function openDetail(mealId) {
+async function openDetail(suggestion) {
   try {
-    detail.value = await api.getRecipeDetail(mealId)
+    detail.value = suggestion.source === 'perso'
+      ? fromCustom(await api.getMyRecipe(suggestion.id))
+      : fromMealDb(await api.getRecipeDetail(suggestion.id))
   } catch (e) {
     error.value = e.response?.data?.error ?? 'Impossible de récupérer cette recette.'
   }
@@ -88,3 +70,16 @@ async function openDetail(mealId) {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.badges span { font-size: 12px; padding: 3px 8px; border-radius: 10px; }
+.recipe-card .match-badge { margin-bottom: 0; }
+.mine-badge { background: #1e3350; color: #7fd0ff; }
+.tm-badge { background: #3a1f3a; color: #f0abfc; font-weight: 700; }
+.no-image {
+  width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1f3a2b, #1a2e45);
+}
+.no-image :deep(.category-icon) { width: 45%; height: 45%; }
+</style>

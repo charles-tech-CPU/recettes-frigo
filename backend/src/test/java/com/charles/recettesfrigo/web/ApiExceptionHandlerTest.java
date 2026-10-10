@@ -2,6 +2,7 @@ package com.charles.recettesfrigo.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.charles.recettesfrigo.service.RecipeImportService;
 import com.charles.recettesfrigo.service.TheMealDbClient;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,14 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(response.getBody()).containsEntry("error", "TheMealDB est injoignable");
+    }
+
+    @Test
+    void unImportDeRecetteImpossibleRenvoie422() {
+        var response = handler.handleImportFailed(new RecipeImportService.RecipeImportException("Aucune recette"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody()).containsEntry("error", "Aucune recette");
     }
 
     @Test

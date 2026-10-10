@@ -1,6 +1,7 @@
 package com.charles.recettesfrigo.service;
 
 import com.charles.recettesfrigo.domain.FridgeItem;
+import com.charles.recettesfrigo.dto.CustomRecipeDto;
 import com.charles.recettesfrigo.dto.RecipeDetailDto;
 import com.charles.recettesfrigo.dto.RecipeSuggestionDto;
 import com.charles.recettesfrigo.repository.FridgeItemRepository;
@@ -9,25 +10,36 @@ import java.util.*;
 import org.springframework.stereotype.Service;
 
 /**
- * Coeur de l'appli : propose des recettes TheMealDB a partir de l'inventaire
- * du frigo. TheMealDB ne sait filtrer que par UN SEUL ingredient a la fois
+ * Coeur de l'appli : propose des recettes a partir de l'inventaire du frigo,
+ * TheMealDB d'un cote et recettes perso de l'autre, classees ensemble par nombre
+ * d'ingredients du frigo utilises.
+ * <p>
+ * TheMealDB ne sait filtrer que par UN SEUL ingredient a la fois
  * (filter.php?i=...), donc on interroge l'API une fois par ingredient du
  * frigo, on compte combien de fois chaque recette ressort (= combien
  * d'ingredients du frigo elle utilise), puis on trie les recettes par ce
- * score decroissant - une approximation raisonnable du "que puis-je cuisiner
- * avec le plus de choses que j'ai deja", sans jamais rien inventer : le
- * detail (ingredients manquants) n'est calcule qu'a partir de la vraie liste
- * d'ingredients de la recette, recuperee via lookup.php.
+ * score decroissant - sans jamais rien inventer : le detail (ingredients
+ * manquants) n'est calcule qu'a partir de la vraie liste d'ingredients de la
+ * recette, recuperee via lookup.php. Titres et ingredients manquants sont
+ * affiches en francais quand DeepL est configure (RecipeTranslationService).
  */
 @Service
 public class RecipeSuggestionService {
 
     private final FridgeItemRepository fridgeItemRepository;
     private final TheMealDbClient client;
+    private final RecipeTranslationService translationService;
+    private final CustomRecipeService customRecipeService;
 
-    public RecipeSuggestionService(FridgeItemRepository fridgeItemRepository, TheMealDbClient client) {
+    public RecipeSuggestionService(
+            FridgeItemRepository fridgeItemRepository,
+            TheMealDbClient client,
+            RecipeTranslationService translationService,
+            CustomRecipeService customRecipeService) {
         this.fridgeItemRepository = fridgeItemRepository;
         this.client = client;
+        this.translationService = translationService;
+        this.customRecipeService = customRecipeService;
     }
 
     public List<RecipeSuggestionDto> suggestFromFridge(int maxResults) {
@@ -35,6 +47,55 @@ public class RecipeSuggestionService {
         if (fridgeItems.isEmpty()) {
             return List.of();
         }
+        List<String> fridgeNames = fridgeItems.stream().map(FridgeItem::getName).toList();
+
+        List<RecipeSuggestionDto> suggestions = new ArrayList<>(customSuggestions(fridgeNames));
+        try {
+            suggestions.addAll(mealDbSuggestions(fridgeItems, maxResults));
+        } catch (IllegalStateException ex) {
+            // TheMealDB injoignable : les recettes perso suffisent si on en a
+            if (suggestions.isEmpty()) {
+                throw ex;
+            }
+        }
+        // Tri stable : a score egal, les recettes perso (ajoutees en premier) passent devant
+        suggestions.sort(Comparator.comparingInt(RecipeSuggestionDto::matchedIngredientCount)
+                .reversed());
+        return suggestions;
+    }
+
+    /** Recettes perso utilisant au moins un ingredient du frigo (correspondance en francais). */
+    private List<RecipeSuggestionDto> customSuggestions(List<String> fridgeNames) {
+        List<RecipeSuggestionDto> suggestions = new ArrayList<>();
+        for (CustomRecipeDto recipe : customRecipeService.findAll()) {
+            List<String> ingredientNames = recipe.ingredients().stream()
+                    .map(CustomRecipeDto.Ingredient::name)
+                    .toList();
+            long matched = fridgeNames.stream()
+                    .filter(fridge -> ingredientNames.stream()
+                            .anyMatch(ingredient -> FrenchIngredientMatcher.matches(ingredient, fridge)))
+                    .count();
+            if (matched == 0) {
+                continue;
+            }
+            List<String> missing = ingredientNames.stream()
+                    .filter(ingredient -> fridgeNames.stream()
+                            .noneMatch(fridge -> FrenchIngredientMatcher.matches(ingredient, fridge)))
+                    .toList();
+            suggestions.add(new RecipeSuggestionDto(
+                    String.valueOf(recipe.id()),
+                    "perso",
+                    recipe.title(),
+                    recipe.imageUrl(),
+                    recipe.thermomix(),
+                    (int) matched,
+                    ingredientNames.size(),
+                    missing));
+        }
+        return suggestions;
+    }
+
+    private List<RecipeSuggestionDto> mealDbSuggestions(List<FridgeItem> fridgeItems, int maxResults) {
         List<String> fridgeNamesLower = fridgeItems.stream()
                 .map(i -> i.getName().toLowerCase(Locale.FRENCH))
                 .toList();
@@ -74,21 +135,31 @@ public class RecipeSuggestionService {
             }
             if (detail == null) continue;
 
+            // Ingredients manquants calcules sur les noms anglais d'origine, affiches traduits
             List<RecipeDetailDto.IngredientLine> allIngredients = MealIngredientParser.extract(detail);
-            List<String> missing = allIngredients.stream()
-                    .map(RecipeDetailDto.IngredientLine::ingredient)
-                    .filter(ingredientName -> fridgeNamesLower.stream()
-                            .noneMatch(fridgeName -> matchesIngredient(ingredientName, fridgeName)))
-                    .toList();
+            RecipeTranslationService.TranslatedMeal french = translationService.translate(mealId, detail);
+            List<String> missing = new ArrayList<>();
+            for (int i = 0; i < allIngredients.size(); i++) {
+                String englishName = allIngredients.get(i).ingredient();
+                if (fridgeNamesLower.stream().noneMatch(fridgeName -> matchesIngredient(englishName, fridgeName))) {
+                    missing.add(
+                            i < french.ingredients().size()
+                                    ? french.ingredients().get(i).ingredient()
+                                    : englishName);
+                }
+            }
 
             TheMealDbClient.MealSummary summary = summaryByMealId.get(mealId);
+            String title = french.translated() || summary == null ? french.title() : summary.strMeal();
             suggestions.add(new RecipeSuggestionDto(
                     mealId,
-                    summary != null ? summary.strMeal() : String.valueOf(detail.get("strMeal")),
+                    "mealdb",
+                    title,
                     summary != null ? summary.strMealThumb() : String.valueOf(detail.get("strMealThumb")),
+                    false,
                     entry.getValue(),
                     allIngredients.size(),
-                    missing));
+                    missing.stream().distinct().toList()));
         }
         return suggestions;
     }
@@ -98,16 +169,18 @@ public class RecipeSuggestionService {
         if (meal == null) {
             throw new EntityNotFoundException("Recette introuvable sur TheMealDB: " + mealId);
         }
+        RecipeTranslationService.TranslatedMeal french = translationService.translate(mealId, meal);
         return new RecipeDetailDto(
                 mealId,
-                str(meal.get("strMeal")),
+                french.title(),
                 str(meal.get("strMealThumb")),
-                str(meal.get("strCategory")),
-                str(meal.get("strArea")),
-                str(meal.get("strInstructions")),
+                french.category(),
+                french.area(),
+                french.instructions(),
                 str(meal.get("strYoutube")),
                 str(meal.get("strSource")),
-                MealIngredientParser.extract(meal));
+                french.ingredients(),
+                french.translated());
     }
 
     /** Correspondance approximative : traduction FR->EN de l'item du frigo, comparee par inclusion. */

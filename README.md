@@ -31,21 +31,39 @@ qui fait tourner le backend (pour interroger TheMealDB) - contrairement aux
 - TheMealDB est **entièrement gratuite et sans limite de requêtes** à
   surveiller (contrairement à Spoonacular), ce qui correspond à ton choix.
 
-### Limite importante assumée (v1) : la langue
+### Recettes en français (DeepL)
 
-TheMealDB est une base de recettes **en anglais**. Deux conséquences :
-- **Titres et instructions des recettes s'affichent en anglais** - aucune
-  API de traduction gratuite fiable n'existe pour ça, et en ajouter une
-  payante aurait changé le budget du projet. L'écran de détail l'indique
-  clairement.
-- **Pour que la recherche fonctionne avec un frigo saisi en français**,
-  j'ai intégré un dictionnaire d'environ 100 ingrédients courants
-  (`IngredientTranslations.java`) qui traduit côté serveur avant d'appeler
-  l'API (ex: "poulet" → "chicken"). Un ingrédient absent de ce dictionnaire
-  est envoyé tel quel à TheMealDB et a de fortes chances de ne remonter
-  aucun résultat. Si tu tombes souvent sur ce cas, dis à Claude Code
-  d'ajouter les mots qui manquent dans cette liste - c'est un fichier très
-  simple à étendre.
+TheMealDB est une base **en anglais**. Chaque recette est traduite en
+français par **DeepL** (titre, ingrédients, quantités, instructions) la
+première fois qu'elle s'affiche, puis gardée en base (`recipe_translation`) :
+le quota gratuit DeepL (500 000 caractères/mois) n'est consommé que pour les
+recettes jamais vues.
+
+Pour l'activer : crée une clé gratuite sur https://www.deepl.com/pro-api
+(elle finit par `:fx`), puis déclare-la dans la variable d'environnement
+`DEEPL_API_KEY` (sous Windows : `setx DEEPL_API_KEY "ta-cle:fx"`, puis
+redémarre IntelliJ). Sans clé, l'appli fonctionne mais les recettes
+TheMealDB restent en anglais, et le détail l'indique.
+
+Pour la recherche, un dictionnaire d'environ 100 ingrédients courants
+(`IngredientTranslations.java`, insensible aux accents) traduit le frigo
+en anglais avant d'appeler TheMealDB (ex : "poulet" → "chicken"). Le
+formulaire "Mon frigo" ne propose que des ingrédients de ce dictionnaire ;
+un ingrédient saisi à la main hors dictionnaire a peu de chances de
+remonter des recettes TheMealDB.
+
+### Mes recettes (dont Thermomix) et notes
+
+- **Mes recettes** : tes recettes en français, saisies à la main ou
+  **importées depuis un lien** (blog Thermomix, Marmiton, 750g… : la
+  recette structurée schema.org publiée par la page pré-remplit le
+  formulaire). Une recette peut être **Thermomix** : chaque étape porte
+  alors son réglage temps / température / vitesse / sens inverse. Elles
+  sont proposées dans "Recettes" comme celles de TheMealDB. Les recettes
+  officielles Cookidoo ne sont pas importables (pas d'API publique,
+  réservées aux abonnés).
+- **Notes** : sur n'importe quelle recette, des notes datées ("cuisson
+  200°C, 25 min au lieu de 35"…), affichées dans le détail.
 
 ### Autre simplification (v1)
 
@@ -94,7 +112,13 @@ départ à titre d'exemple). L'API démarre sur `http://localhost:8085`.
 | PUT | `/api/fridge-items/{id}` | Modifier un ingrédient |
 | DELETE | `/api/fridge-items/{id}` | Retirer un ingrédient |
 | GET | `/api/recipes/suggestions?limit=12` | Recettes suggérées, triées par nombre d'ingrédients du frigo utilisés |
-| GET | `/api/recipes/{mealId}` | Détail complet d'une recette (ingrédients, instructions, vidéo) |
+| GET | `/api/recipes/{mealId}` | Détail complet d'une recette TheMealDB, traduite (ingrédients, instructions, vidéo) |
+| GET/POST | `/api/my-recipes` | Mes recettes : liste / création |
+| GET/PUT/DELETE | `/api/my-recipes/{id}` | Mes recettes : détail / modification / suppression |
+| POST | `/api/my-recipes/import` | Lit la recette d'un lien (`{"url": "..."}`), sans l'enregistrer |
+| GET | `/api/recipe-notes?recipe=mealdb:52772` | Notes d'une recette (`mealdb:<id>` ou `perso:<id>`) |
+| POST | `/api/recipe-notes` | Ajouter une note |
+| DELETE | `/api/recipe-notes/{id}` | Supprimer une note |
 
 Compilation, tests (`mvn verify`) et appels réels à TheMealDB vérifiés :
 le format des réponses `filter.php`/`lookup.php` correspond bien au code.
@@ -138,8 +162,6 @@ dans la liste déroulante en haut à droite : **Backend (Spring Boot)**,
 
 ## 9. Pistes d'évolution (hors v1)
 
-- Traduction automatique des titres/instructions (nécessiterait une API de
-  traduction, gratuite avec quota ou payante).
 - Étendre le dictionnaire français → anglais au fur et à mesure des
   ingrédients qui ne matchent pas.
 - Liste de courses générée à partir des ingrédients manquants d'une recette

@@ -1,5 +1,6 @@
 package com.charles.recettesfrigo.web;
 
+import com.charles.recettesfrigo.service.RecipeImportService;
 import com.charles.recettesfrigo.service.TheMealDbClient;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Map;
@@ -24,6 +25,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, String>> handleConflict(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(RecipeImportService.RecipeImportException.class)
+    public ResponseEntity<Map<String, String>> handleImportFailed(RecipeImportService.RecipeImportException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(TheMealDbClient.TheMealDbUnavailableException.class)
