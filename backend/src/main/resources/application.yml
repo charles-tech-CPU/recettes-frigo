@@ -14,10 +14,10 @@ server:
   port: 8085
 
 app:
-  deepl:
-    # Cle de l'API DeepL (gratuite : https://www.deepl.com/pro-api, suffixe ":fx").
-    # Absente : les recettes TheMealDB restent en anglais.
-    api-key: ${DEEPL_API_KEY:}
+  translation:
+    # Traduction gratuite MyMemory, sans compte ni cle. Optionnel : une adresse email
+    # (aucune inscription) fait passer le quota de 5 000 a 50 000 caracteres par jour.
+    email: ${MYMEMORY_EMAIL:}
   cors:
     # Liste de motifs separes par des virgules (ex: http://*:8180,https://*:8280).
     # Absente ou vide : Vite en LAN et acces HTTPS via Tailscale (WebConfig.DEFAULT_ALLOWED_ORIGINS).

@@ -54,12 +54,21 @@ class RecipeSuggestionServiceTest {
         return new MealSummary(id, title, "https://img/" + id + ".jpg");
     }
 
-    /** Traduction "neutre" : la recette reste en anglais, comme sans cle DeepL. */
+    /** Traduction "neutre" : les recettes restent en anglais (quota de traduction epuise). */
     private void noTranslation() {
-        when(translationService.translate(anyString(), any())).thenAnswer(inv -> {
-            Map<String, Object> meal = inv.getArgument(1);
-            return new TranslatedMeal(
-                    (String) meal.get("strMeal"), null, null, null, MealIngredientParser.extract(meal), false);
+        when(translationService.translateSummaries(any())).thenAnswer(inv -> {
+            Map<String, Map<String, Object>> meals = inv.getArgument(0);
+            Map<String, TranslatedMeal> english = new java.util.HashMap<>();
+            meals.forEach((id, meal) -> english.put(
+                    id,
+                    new TranslatedMeal(
+                            (String) meal.get("strMeal"),
+                            null,
+                            null,
+                            null,
+                            MealIngredientParser.extract(meal),
+                            false)));
+            return english;
         });
     }
 
@@ -122,14 +131,16 @@ class RecipeSuggestionServiceTest {
         when(client.filterByIngredient("chicken")).thenReturn(List.of(summary("1", "Chicken Soup")));
         Map<String, Object> meal = Map.of("strIngredient1", "Chicken", "strIngredient2", "Water");
         when(client.lookupById("1")).thenReturn(meal);
-        when(translationService.translate("1", meal))
-                .thenReturn(new TranslatedMeal(
-                        "Soupe de poulet",
-                        "Poulet",
-                        null,
-                        null,
-                        List.of(new IngredientLine("Poulet", ""), new IngredientLine("Eau", "")),
-                        true));
+        when(translationService.translateSummaries(Map.of("1", meal)))
+                .thenReturn(Map.of(
+                        "1",
+                        new TranslatedMeal(
+                                "Soupe de poulet",
+                                "Poulet",
+                                null,
+                                null,
+                                List.of(new IngredientLine("Poulet", ""), new IngredientLine("Eau", "")),
+                                true)));
 
         RecipeSuggestionDto soup = service.suggestFromFridge(12).get(0);
 
@@ -193,7 +204,7 @@ class RecipeSuggestionServiceTest {
     void detailDUneRecetteTraduite() {
         Map<String, Object> meal = Map.of("strMeal", "Teriyaki Chicken Casserole", "strMealThumb", "https://img");
         when(client.lookupById("52772")).thenReturn(meal);
-        when(translationService.translate(eq("52772"), any()))
+        when(translationService.translateFull(eq("52772"), any()))
                 .thenReturn(new TranslatedMeal(
                         "Gratin de poulet teriyaki",
                         "Poulet",

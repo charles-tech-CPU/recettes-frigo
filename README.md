@@ -31,19 +31,21 @@ qui fait tourner le backend (pour interroger TheMealDB) - contrairement aux
 - TheMealDB est **entièrement gratuite et sans limite de requêtes** à
   surveiller (contrairement à Spoonacular), ce qui correspond à ton choix.
 
-### Recettes en français (DeepL)
+### Recettes en français (MyMemory)
 
-TheMealDB est une base **en anglais**. Chaque recette est traduite en
-français par **DeepL** (titre, ingrédients, quantités, instructions) la
-première fois qu'elle s'affiche, puis gardée en base (`recipe_translation`) :
-le quota gratuit DeepL (500 000 caractères/mois) n'est consommé que pour les
-recettes jamais vues.
+TheMealDB est une base **en anglais**. Les recettes sont traduites en
+français par **MyMemory**, un service gratuit **sans compte, sans clé et
+sans carte bancaire**, puis gardées en base (`recipe_translation`) : une
+recette n'est jamais traduite deux fois. Pour ménager le quota gratuit, la
+liste des suggestions ne traduit que les titres et les noms d'ingrédients ;
+instructions et quantités sont traduites à l'ouverture d'une recette.
 
-Pour l'activer : crée une clé gratuite sur https://www.deepl.com/pro-api
-(elle finit par `:fx`), puis déclare-la dans la variable d'environnement
-`DEEPL_API_KEY` (sous Windows : `setx DEEPL_API_KEY "ta-cle:fx"`, puis
-redémarre IntelliJ). Sans clé, l'appli fonctionne mais les recettes
-TheMealDB restent en anglais, et le détail l'indique.
+Quota : 5 000 caractères par jour en anonyme (la liste + une ou deux
+recettes nouvelles par jour). Pour le passer à 50 000, il suffit de
+fournir une adresse email (sans inscription) dans la variable
+d'environnement `MYMEMORY_EMAIL` (`setx MYMEMORY_EMAIL "toi@exemple.fr"`,
+puis redémarrer IntelliJ). Quota atteint : la recette s'affiche en anglais
+et sera traduite au prochain essai.
 
 Pour la recherche, un dictionnaire d'environ 100 ingrédients courants
 (`IngredientTranslations.java`, insensible aux accents) traduit le frigo

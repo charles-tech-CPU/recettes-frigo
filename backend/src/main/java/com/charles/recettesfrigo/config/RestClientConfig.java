@@ -27,7 +27,7 @@ public class RestClientConfig {
     }
 
     /**
-     * Timeouts des autres clients HTTP (DeepL, import de recette par lien), construits
+     * Timeouts des autres clients HTTP (traduction MyMemory, import de recette par lien), construits
      * a partir du RestClient.Builder de Spring Boot : une page ou une API lente ne
      * doit jamais bloquer la requete indefiniment.
      */

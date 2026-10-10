@@ -36,8 +36,8 @@ export function fromMealDb(detail) {
     videoUrl: detail.videoUrl,
     sourceUrl: detail.sourceUrl,
     note: detail.translated
-      ? 'Recette TheMealDB traduite automatiquement par DeepL.'
-      : 'Recette TheMealDB en anglais : la traduction DeepL n\'est pas configurée ou a échoué.'
+      ? 'Recette TheMealDB traduite automatiquement (MyMemory).'
+      : 'Recette TheMealDB restée en anglais : traduction indisponible pour le moment (quota gratuit du jour atteint ?). Réessaie plus tard.'
   }
 }
 

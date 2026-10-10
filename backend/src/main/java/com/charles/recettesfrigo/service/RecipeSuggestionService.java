@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
  * score decroissant - sans jamais rien inventer : le detail (ingredients
  * manquants) n'est calcule qu'a partir de la vraie liste d'ingredients de la
  * recette, recuperee via lookup.php. Titres et ingredients manquants sont
- * affiches en francais quand DeepL est configure (RecipeTranslationService).
+ * affiches en francais (RecipeTranslationService, via MyMemory).
  */
 @Service
 public class RecipeSuggestionService {
@@ -124,33 +124,47 @@ public class RecipeSuggestionService {
                 .limit(Math.max(1, maxResults))
                 .toList();
 
+        // Detail de chaque recette retenue (liste complete des ingredients)
+        Map<String, Map<String, Object>> detailsById = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : ranked) {
+            try {
+                Map<String, Object> detail = client.lookupById(entry.getKey());
+                if (detail != null) {
+                    detailsById.put(entry.getKey(), detail);
+                }
+            } catch (TheMealDbClient.TheMealDbUnavailableException ex) {
+                // on saute cette recette plutot que de faire echouer toute la liste
+            }
+        }
+        // Titres et noms d'ingredients traduits en une fois pour toute la liste
+        Map<String, RecipeTranslationService.TranslatedMeal> frenchById =
+                translationService.translateSummaries(detailsById);
+
         List<RecipeSuggestionDto> suggestions = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : ranked) {
             String mealId = entry.getKey();
-            Map<String, Object> detail;
-            try {
-                detail = client.lookupById(mealId);
-            } catch (TheMealDbClient.TheMealDbUnavailableException ex) {
-                continue; // on saute cette recette plutot que de faire echouer toute la liste
-            }
+            Map<String, Object> detail = detailsById.get(mealId);
             if (detail == null) continue;
 
             // Ingredients manquants calcules sur les noms anglais d'origine, affiches traduits
             List<RecipeDetailDto.IngredientLine> allIngredients = MealIngredientParser.extract(detail);
-            RecipeTranslationService.TranslatedMeal french = translationService.translate(mealId, detail);
+            RecipeTranslationService.TranslatedMeal french = frenchById.get(mealId);
             List<String> missing = new ArrayList<>();
             for (int i = 0; i < allIngredients.size(); i++) {
                 String englishName = allIngredients.get(i).ingredient();
                 if (fridgeNamesLower.stream().noneMatch(fridgeName -> matchesIngredient(englishName, fridgeName))) {
                     missing.add(
-                            i < french.ingredients().size()
+                            french != null && i < french.ingredients().size()
                                     ? french.ingredients().get(i).ingredient()
                                     : englishName);
                 }
             }
 
             TheMealDbClient.MealSummary summary = summaryByMealId.get(mealId);
-            String title = french.translated() || summary == null ? french.title() : summary.strMeal();
+            String title =
+                    french != null && french.title() != null && !french.title().isBlank()
+                            ? french.title()
+                            : summary != null ? summary.strMeal() : String.valueOf(detail.get("strMeal"));
             suggestions.add(new RecipeSuggestionDto(
                     mealId,
                     "mealdb",
@@ -169,7 +183,7 @@ public class RecipeSuggestionService {
         if (meal == null) {
             throw new EntityNotFoundException("Recette introuvable sur TheMealDB: " + mealId);
         }
-        RecipeTranslationService.TranslatedMeal french = translationService.translate(mealId, meal);
+        RecipeTranslationService.TranslatedMeal french = translationService.translateFull(mealId, meal);
         return new RecipeDetailDto(
                 mealId,
                 french.title(),

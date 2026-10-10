@@ -13,7 +13,9 @@ import com.charles.recettesfrigo.dto.RecipeDetailDto.IngredientLine;
 import com.charles.recettesfrigo.repository.RecipeTranslationRepository;
 import com.charles.recettesfrigo.service.RecipeTranslationService.TranslatedMeal;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,16 +34,16 @@ class RecipeTranslationServiceTest {
     private RecipeTranslationRepository repository;
 
     @Mock
-    private DeepLClient deepL;
+    private MyMemoryClient translator;
 
     private RecipeTranslationService service;
 
     @BeforeEach
     void setUp() {
-        service = new RecipeTranslationService(repository, deepL, new ObjectMapper());
+        service = new RecipeTranslationService(repository, translator, new ObjectMapper());
     }
 
-    private static Map<String, Object> meal() {
+    private static Map<String, Object> soup() {
         Map<String, Object> meal = new HashMap<>();
         meal.put("strMeal", "Chicken Soup");
         meal.put("strCategory", "Chicken");
@@ -54,62 +56,108 @@ class RecipeTranslationServiceTest {
         return meal;
     }
 
-    @Test
-    void uneRecetteDejaTraduiteEstRelueEnBaseSansAppelerDeepL() {
+    private static RecipeTranslation cached(boolean full) {
         RecipeTranslation cached = new RecipeTranslation();
+        cached.setMealId("1");
         cached.setTitle("Soupe de poulet");
+        cached.setInstructions(full ? "Faire bouillir l'eau." : null);
         cached.setIngredientsJson("[{\"ingredient\":\"Poulet\",\"measure\":\"1 kg\"}]");
-        when(repository.findById("1")).thenReturn(Optional.of(cached));
-
-        TranslatedMeal result = service.translate("1", meal());
-
-        assertThat(result.title()).isEqualTo("Soupe de poulet");
-        assertThat(result.translated()).isTrue();
-        assertThat(result.ingredients()).containsExactly(new IngredientLine("Poulet", "1 kg"));
-        verifyNoInteractions(deepL);
+        cached.setFullTranslation(full);
+        return cached;
     }
 
     @Test
-    void sansCleDeepLLaRecetteResteEnAnglais() {
-        when(deepL.isEnabled()).thenReturn(false);
+    void listeLesRecettesDejaTraduitesSontRelues() {
+        when(repository.findById("1")).thenReturn(Optional.of(cached(false)));
 
-        TranslatedMeal result = service.translate("1", meal());
+        Map<String, TranslatedMeal> result = service.translateSummaries(Map.of("1", soup()));
 
-        assertThat(result.title()).isEqualTo("Chicken Soup");
-        assertThat(result.translated()).isFalse();
+        assertThat(result.get("1").title()).isEqualTo("Soupe de poulet");
+        verifyNoInteractions(translator);
+    }
+
+    @Test
+    void listeTitresEtNomsDIngredientsDeToutesLesRecettesEnUneFois() {
+        Map<String, Object> rice = new HashMap<>(Map.of("strMeal", "Fried Rice", "strIngredient1", "Rice"));
+        Map<String, Map<String, Object>> meals = new LinkedHashMap<>();
+        meals.put("1", soup());
+        meals.put("2", rice);
+        when(translator.translateToFrench(List.of("Chicken Soup", "Chicken", "Salt", "Fried Rice", "Rice")))
+                .thenReturn(List.of("Soupe de poulet", "Poulet", "Sel", "Riz frit", "Riz"));
+
+        Map<String, TranslatedMeal> result = service.translateSummaries(meals);
+
+        assertThat(result.get("1").title()).isEqualTo("Soupe de poulet");
+        assertThat(result.get("1").ingredients())
+                .containsExactly(new IngredientLine("Poulet", "1 kg"), new IngredientLine("Sel", ""));
+        assertThat(result.get("2").title()).isEqualTo("Riz frit");
+        ArgumentCaptor<RecipeTranslation> saved = ArgumentCaptor.forClass(RecipeTranslation.class);
+        verify(repository, org.mockito.Mockito.times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).noneMatch(RecipeTranslation::isFullTranslation);
+    }
+
+    @Test
+    void listeQuotaAtteintLesRecettesRestentEnAnglais() {
+        when(translator.translateToFrench(anyList())).thenThrow(new IllegalStateException("quota"));
+
+        Map<String, TranslatedMeal> result = service.translateSummaries(Map.of("1", soup()));
+
+        assertThat(result.get("1").title()).isEqualTo("Chicken Soup");
+        assertThat(result.get("1").translated()).isFalse();
         verify(repository, never()).save(any());
     }
 
     @Test
-    void laRecetteEstTraduiteEnUneRequeteSansLesTextesVidesPuisEnregistree() {
-        when(deepL.isEnabled()).thenReturn(true);
-        // envoyes : titre, categorie, instructions, Chicken, 1 kg, Salt (origine et mesure vides exclues)
-        when(deepL.translateToFrench(List.of("Chicken Soup", "Chicken", "Boil the water.", "Chicken", "1 kg", "Salt")))
-                .thenReturn(List.of("Soupe de poulet", "Poulet", "Faire bouillir l'eau.", "Poulet", "1 kg", "Sel"));
+    void detailUneRecetteCompleteDejaTraduiteEstRelue() {
+        when(repository.findById("1")).thenReturn(Optional.of(cached(true)));
 
-        TranslatedMeal result = service.translate("1", meal());
+        TranslatedMeal result = service.translateFull("1", soup());
+
+        assertThat(result.instructions()).isEqualTo("Faire bouillir l'eau.");
+        verifyNoInteractions(translator);
+    }
+
+    @Test
+    void detailUneTraductionPartielleEstCompleteeEtEnregistree() {
+        when(repository.findById("1")).thenReturn(Optional.of(cached(false)));
+        when(translator.translateToFrench(
+                        Arrays.asList("Chicken Soup", "Chicken", "", "Boil the water.", "Chicken", "1 kg", "Salt", "")))
+                .thenReturn(Arrays.asList(
+                        "Soupe de poulet", "Poulet", "", "Faire bouillir l'eau.", "Poulet", "1 kg", "Sel", ""));
+
+        TranslatedMeal result = service.translateFull("1", soup());
 
         assertThat(result.translated()).isTrue();
-        assertThat(result.title()).isEqualTo("Soupe de poulet");
+        assertThat(result.category()).isEqualTo("Poulet");
         assertThat(result.area()).isNull();
         assertThat(result.instructions()).isEqualTo("Faire bouillir l'eau.");
         assertThat(result.ingredients())
                 .containsExactly(new IngredientLine("Poulet", "1 kg"), new IngredientLine("Sel", ""));
         ArgumentCaptor<RecipeTranslation> saved = ArgumentCaptor.forClass(RecipeTranslation.class);
         verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getMealId()).isEqualTo("1");
-        assertThat(saved.getValue().getIngredientsJson()).contains("\"Sel\"");
+        assertThat(saved.getValue().isFullTranslation()).isTrue();
     }
 
     @Test
-    void uneErreurDeepLLaisseLaRecetteEnAnglais() {
-        when(deepL.isEnabled()).thenReturn(true);
-        when(deepL.translateToFrench(anyList())).thenThrow(new ResourceAccessException("timeout"));
+    void detailQuotaAtteintGardeLeTitreDejaTraduitEtLeResteEnAnglais() {
+        when(repository.findById("1")).thenReturn(Optional.of(cached(false)));
+        when(translator.translateToFrench(anyList())).thenThrow(new ResourceAccessException("timeout"));
 
-        TranslatedMeal result = service.translate("1", meal());
+        TranslatedMeal result = service.translateFull("1", soup());
 
         assertThat(result.translated()).isFalse();
-        assertThat(result.title()).isEqualTo("Chicken Soup");
+        assertThat(result.title()).isEqualTo("Soupe de poulet");
+        assertThat(result.instructions()).isEqualTo("Boil the water.");
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void detailSansAucuneTraductionResteEnAnglais() {
+        when(translator.translateToFrench(anyList())).thenThrow(new IllegalStateException("quota"));
+
+        TranslatedMeal result = service.translateFull("1", soup());
+
+        assertThat(result.title()).isEqualTo("Chicken Soup");
+        assertThat(result.translated()).isFalse();
     }
 }

@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** Traduction francaise d'une recette TheMealDB, faite une fois par DeepL puis relue en base. */
+/** Traduction francaise d'une recette TheMealDB (MyMemory), faite une fois puis relue en base. */
 @Entity
 @Table(name = "recipe_translation")
 @Getter
@@ -39,4 +39,11 @@ public class RecipeTranslation {
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
+
+    /**
+     * false : seuls le titre et les noms d'ingredients sont traduits (liste des
+     * suggestions) ; true : recette complete (detail), instructions et quantites comprises.
+     */
+    @Column(name = "full_translation", nullable = false)
+    private boolean fullTranslation;
 }

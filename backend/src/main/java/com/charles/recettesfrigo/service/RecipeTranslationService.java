@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,13 +18,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
 /**
- * Version francaise d'une recette TheMealDB. Chaque recette n'est traduite qu'une
- * fois (une requete DeepL pour le titre, la categorie, l'origine, les instructions,
- * les ingredients et les quantites), puis relue dans recipe_translation : le quota
- * gratuit DeepL n'est consomme que pour les recettes jamais vues.
- * <p>
- * DeepL non configure ou en panne : la recette reste en anglais (translated = false)
- * plutot que de faire echouer l'affichage.
+ * Version francaise des recettes TheMealDB, traduites par MyMemory (gratuit, quota
+ * quotidien limite) puis gardees dans recipe_translation : une recette n'est jamais
+ * traduite deux fois. Pour menager le quota, la traduction se fait en deux temps :
+ * <ul>
+ *   <li>liste des suggestions : titre et noms d'ingredients seulement, toutes les
+ *       recettes regroupees dans quelques requetes (translateSummaries) ;</li>
+ *   <li>detail d'une recette : categorie, origine, instructions et quantites en plus
+ *       (translateFull), seulement pour les recettes ouvertes.</li>
+ * </ul>
+ * Traduction impossible (quota du jour atteint, service en panne) : la recette reste
+ * en anglais (translated = false) et sera retentee la fois suivante.
  */
 @Service
 public class RecipeTranslationService {
@@ -32,16 +37,17 @@ public class RecipeTranslationService {
     private static final TypeReference<List<IngredientLine>> INGREDIENTS = new TypeReference<>() {};
 
     private final RecipeTranslationRepository repository;
-    private final DeepLClient deepL;
+    private final MyMemoryClient translator;
     private final ObjectMapper objectMapper;
 
     public RecipeTranslationService(
-            RecipeTranslationRepository repository, DeepLClient deepL, ObjectMapper objectMapper) {
+            RecipeTranslationRepository repository, MyMemoryClient translator, ObjectMapper objectMapper) {
         this.repository = repository;
-        this.deepL = deepL;
+        this.translator = translator;
         this.objectMapper = objectMapper;
     }
 
+    /** Ingredients dans l'ordre de TheMealDB ; translated = false si la recette est restee en anglais. */
     public record TranslatedMeal(
             String title,
             String category,
@@ -50,62 +56,107 @@ public class RecipeTranslationService {
             List<IngredientLine> ingredients,
             boolean translated) {}
 
-    public TranslatedMeal translate(String mealId, Map<String, Object> meal) {
+    /** Titres et noms d'ingredients en francais, pour la liste des suggestions (cle = idMeal). */
+    public Map<String, TranslatedMeal> translateSummaries(Map<String, Map<String, Object>> mealsById) {
+        Map<String, TranslatedMeal> result = new LinkedHashMap<>();
+        Map<String, TranslatedMeal> toTranslate = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, Object>> entry : mealsById.entrySet()) {
+            Optional<RecipeTranslation> cached = repository.findById(entry.getKey());
+            TranslatedMeal english = english(entry.getValue());
+            result.put(entry.getKey(), cached.map(this::fromCache).orElse(english));
+            if (cached.isEmpty()) {
+                toTranslate.put(entry.getKey(), english);
+            }
+        }
+        if (toTranslate.isEmpty()) {
+            return result;
+        }
+
+        // Toutes les recettes a plat dans une seule liste : titre puis noms d'ingredients
+        List<String> texts = new ArrayList<>();
+        for (TranslatedMeal meal : toTranslate.values()) {
+            texts.add(meal.title());
+            meal.ingredients().forEach(line -> texts.add(line.ingredient()));
+        }
+        List<String> french;
+        try {
+            french = translator.translateToFrench(texts);
+        } catch (RestClientException | IllegalStateException ex) {
+            log.warn("Traduction des suggestions impossible : {}", ex.getMessage());
+            return result;
+        }
+
+        int position = 0;
+        for (Map.Entry<String, TranslatedMeal> entry : toTranslate.entrySet()) {
+            TranslatedMeal english = entry.getValue();
+            String title = capitalize(french.get(position++));
+            List<IngredientLine> ingredients = new ArrayList<>();
+            for (IngredientLine line : english.ingredients()) {
+                // quantites gardees en anglais : traduites avec le detail
+                ingredients.add(new IngredientLine(capitalize(french.get(position++)), line.measure()));
+            }
+            TranslatedMeal summary = new TranslatedMeal(title, null, null, null, ingredients, true);
+            save(entry.getKey(), summary, false);
+            result.put(entry.getKey(), summary);
+        }
+        return result;
+    }
+
+    /** Recette complete en francais, pour l'ecran de detail. */
+    public TranslatedMeal translateFull(String mealId, Map<String, Object> meal) {
         Optional<RecipeTranslation> cached = repository.findById(mealId);
-        if (cached.isPresent()) {
+        if (cached.isPresent() && cached.get().isFullTranslation()) {
             return fromCache(cached.get());
         }
-        TranslatedMeal english = new TranslatedMeal(
+        TranslatedMeal english = english(meal);
+        List<String> texts = new ArrayList<>(List.of(
+                nullToEmpty(english.title()),
+                nullToEmpty(english.category()),
+                nullToEmpty(english.area()),
+                nullToEmpty(english.instructions())));
+        for (IngredientLine line : english.ingredients()) {
+            texts.add(line.ingredient());
+            texts.add(line.measure());
+        }
+        try {
+            List<String> french = translator.translateToFrench(texts);
+            List<IngredientLine> ingredients = new ArrayList<>();
+            for (int i = 0; i < english.ingredients().size(); i++) {
+                ingredients.add(
+                        new IngredientLine(capitalize(french.get(4 + 2 * i)), nullToEmpty(french.get(5 + 2 * i))));
+            }
+            TranslatedMeal full = new TranslatedMeal(
+                    capitalize(french.get(0)),
+                    emptyToNull(french.get(1)),
+                    emptyToNull(french.get(2)),
+                    emptyToNull(french.get(3)),
+                    ingredients,
+                    true);
+            save(mealId, full, true);
+            return full;
+        } catch (RestClientException | IllegalStateException ex) {
+            log.warn("Traduction de la recette {} impossible : {}", mealId, ex.getMessage());
+            // Titre et ingredients deja traduits pour la liste : mieux que tout en anglais
+            return cached.map(this::fromCache)
+                    .map(partial -> new TranslatedMeal(
+                            partial.title(),
+                            english.category(),
+                            english.area(),
+                            english.instructions(),
+                            partial.ingredients(),
+                            false))
+                    .orElse(english);
+        }
+    }
+
+    private static TranslatedMeal english(Map<String, Object> meal) {
+        return new TranslatedMeal(
                 str(meal.get("strMeal")),
                 str(meal.get("strCategory")),
                 str(meal.get("strArea")),
                 str(meal.get("strInstructions")),
                 MealIngredientParser.extract(meal),
                 false);
-        if (!deepL.isEnabled()) {
-            return english;
-        }
-        try {
-            TranslatedMeal french = translateWithDeepL(english);
-            repository.save(toEntity(mealId, french));
-            return french;
-        } catch (RestClientException | IllegalStateException | JsonProcessingException ex) {
-            log.warn("Traduction DeepL impossible pour la recette {} : {}", mealId, ex.getMessage());
-            return english;
-        }
-    }
-
-    private TranslatedMeal translateWithDeepL(TranslatedMeal english) {
-        // Textes a traduire, a plat : titre, categorie, origine, instructions, puis
-        // chaque ingredient et chaque quantite. Les textes vides ne sont pas envoyes.
-        List<String> texts = new ArrayList<>();
-        texts.add(english.title());
-        texts.add(english.category());
-        texts.add(english.area());
-        texts.add(english.instructions());
-        for (IngredientLine line : english.ingredients()) {
-            texts.add(line.ingredient());
-            texts.add(line.measure());
-        }
-        List<Integer> toSend = new ArrayList<>();
-        for (int i = 0; i < texts.size(); i++) {
-            if (texts.get(i) != null && !texts.get(i).isBlank()) {
-                toSend.add(i);
-            }
-        }
-        List<String> translated =
-                deepL.translateToFrench(toSend.stream().map(texts::get).toList());
-        List<String> result = new ArrayList<>(texts);
-        for (int i = 0; i < toSend.size(); i++) {
-            result.set(toSend.get(i), translated.get(i));
-        }
-
-        List<IngredientLine> ingredients = new ArrayList<>();
-        for (int i = 0; i < english.ingredients().size(); i++) {
-            String measure = result.get(5 + 2 * i);
-            ingredients.add(new IngredientLine(result.get(4 + 2 * i), measure == null ? "" : measure));
-        }
-        return new TranslatedMeal(result.get(0), result.get(1), result.get(2), result.get(3), ingredients, true);
     }
 
     private TranslatedMeal fromCache(RecipeTranslation entity) {
@@ -119,20 +170,41 @@ public class RecipeTranslationService {
                 entity.getTitle(), entity.getCategory(), entity.getArea(), entity.getInstructions(), ingredients, true);
     }
 
-    private RecipeTranslation toEntity(String mealId, TranslatedMeal french) throws JsonProcessingException {
-        RecipeTranslation entity = new RecipeTranslation();
+    private void save(String mealId, TranslatedMeal french, boolean full) {
+        RecipeTranslation entity = repository.findById(mealId).orElseGet(RecipeTranslation::new);
         entity.setMealId(mealId);
-        entity.setTitle(truncate(french.title() == null ? "" : french.title(), 300));
+        entity.setTitle(truncate(nullToEmpty(french.title()), 300));
         entity.setCategory(truncate(french.category(), 100));
         entity.setArea(truncate(french.area(), 100));
         entity.setInstructions(french.instructions());
-        entity.setIngredientsJson(objectMapper.writeValueAsString(french.ingredients()));
+        try {
+            entity.setIngredientsJson(objectMapper.writeValueAsString(french.ingredients()));
+        } catch (JsonProcessingException ex) {
+            return; // pas de cache plutot qu'un cache incomplet
+        }
+        entity.setFullTranslation(full);
         entity.setCreatedAt(OffsetDateTime.now());
-        return entity;
+        repository.save(entity);
+    }
+
+    /** MyMemory renvoie parfois le titre ou l'ingredient sans majuscule ("riz au poulet"). */
+    private static String capitalize(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
     private static String truncate(String value, int max) {
         return value == null || value.length() <= max ? value : value.substring(0, max);
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static String str(Object o) {

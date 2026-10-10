@@ -2,7 +2,7 @@ package com.charles.recettesfrigo.dto;
 
 import java.util.List;
 
-/** Detail d'une recette TheMealDB ; translated = false si elle est restee en anglais (DeepL absent ou en panne). */
+/** Detail d'une recette TheMealDB ; translated = false si elle est restee en anglais (quota MyMemory du jour atteint ou service en panne). */
 public record RecipeDetailDto(
         String mealId,
         String title,
