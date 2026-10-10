@@ -1,8 +1,16 @@
 import axios from 'axios'
 
-// L'API tourne sur la meme machine que la page, port 8085 : on reprend l'hote
-// courant pour que l'appli marche aussi depuis un autre appareil du reseau local.
-const client = axios.create({ baseURL: `http://${window.location.hostname}:8085/api` })
+// L'API tourne sur la meme machine que la page : on reprend l'hote courant pour
+// que l'appli marche aussi depuis un autre appareil du reseau local.
+// HTTPS via Tailscale si la page est en HTTPS (evite le "Mixed Content"), sinon HTTP en LAN.
+const PORT_API_HTTP = 8085
+const PORT_API_HTTPS = 8385
+
+const API_BASE_URL = window.location.protocol === 'https:'
+  ? `https://${window.location.hostname}:${PORT_API_HTTPS}/api`
+  : `http://${window.location.hostname}:${PORT_API_HTTP}/api`
+
+const client = axios.create({ baseURL: API_BASE_URL })
 
 export default {
   getFridgeItems() {
