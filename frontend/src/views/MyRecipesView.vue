@@ -20,7 +20,7 @@
         :class="{ opening: opening === f.recipeKey }"
         @click="openFavorite(f)"
       >
-        <FavoriteButton overlay :recipe="{ key: f.recipeKey, title: f.title, imageUrl: f.imageUrl }" />
+        <FavoriteButton on-card :recipe="{ key: f.recipeKey, title: f.title, imageUrl: f.imageUrl }" />
         <img v-if="f.imageUrl" :src="f.imageUrl" :alt="f.title" />
         <div v-else class="no-image"><CategoryIcon name="autres" /></div>
         <div class="content">
@@ -39,7 +39,7 @@
 
   <div class="recipe-grid">
     <div v-for="r in recipes" :key="r.id" class="recipe-card" @click="detail = fromCustom(r)">
-      <FavoriteButton overlay :recipe="{ key: `perso:${r.id}`, title: r.title, imageUrl: r.imageUrl }" />
+      <FavoriteButton on-card :recipe="{ key: `perso:${r.id}`, title: r.title, imageUrl: r.imageUrl }" />
       <img v-if="r.imageUrl" :src="r.imageUrl" :alt="r.title" />
       <div v-else class="no-image"><CategoryIcon name="autres" /></div>
       <div class="content">

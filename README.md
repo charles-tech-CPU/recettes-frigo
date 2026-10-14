@@ -20,8 +20,10 @@ qui fait tourner le backend (pour interroger TheMealDB) - contrairement aux
 ## 2. Principe du projet
 
 - **"Mon frigo"** : un inventaire simple et persistant (nom, quantité libre,
-  catégorie libre) que tu modifies au fil de l'eau - comme demandé, rien à
-  ressaisir à chaque recherche.
+  catégorie libre, date de péremption optionnelle) que tu modifies au fil de
+  l'eau - comme demandé, rien à ressaisir à chaque recherche. Boutons − / +
+  sur les quantités chiffrées (arrivé à zéro, l'ingrédient est retiré) et
+  encart "À consommer vite" pour ce qui périme dans les 3 jours.
 - **"Recettes"** : l'écran principal interroge TheMealDB pour chaque
   ingrédient de ton frigo, compte combien de fois chaque recette ressort
   (= combien d'ingrédients de ton frigo elle utilise), et affiche les
@@ -66,6 +68,19 @@ remonter des recettes TheMealDB.
   réservées aux abonnés).
 - **Notes** : sur n'importe quelle recette, des notes datées ("cuisson
   200°C, 25 min au lieu de 35"…), affichées dans le détail.
+
+### Favoris, filtres, courses et "J'ai cuisiné ça"
+
+- **Favoris** : un cœur sur chaque recette (TheMealDB ou perso), retrouvées
+  en tête de "Mes recettes".
+- **Filtres** sur les suggestions : "J'ai tout", Favoris, Mes recettes,
+  Thermomix, "Écoule ce qui périme". Les recettes qui utilisent un
+  ingrédient qui périme bientôt passent en tête.
+- **Liste de courses** ("Courses") : le bouton 🛒 d'une recette y ajoute les
+  ingrédients manquants ; on coche au magasin puis "Ranger dans le frigo"
+  ajoute les achats (ou additionne la quantité si l'unité est la même).
+- **"J'ai cuisiné ça"** : depuis une recette, baisse la quantité ou retire
+  du frigo chaque ingrédient utilisé (au choix, ingrédient par ingrédient).
 
 ### Autre simplification (v1)
 
@@ -166,9 +181,7 @@ dans la liste déroulante en haut à droite : **Backend (Spring Boot)**,
 
 - Étendre le dictionnaire français → anglais au fur et à mesure des
   ingrédients qui ne matchent pas.
-- Liste de courses générée à partir des ingrédients manquants d'une recette
-  choisie.
-- Historique des recettes déjà cuisinées / favoris.
+- Historique des recettes déjà cuisinées.
 - Basculer vers une API multi-ingrédients native (ex: Spoonacular) si le
   dictionnaire de traduction ou le système "un ingrédient à la fois" montre
   ses limites à l'usage.

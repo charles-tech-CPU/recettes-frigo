@@ -31,6 +31,10 @@ export default {
   getRecipeDetail(mealId) {
     return client.get(`/recipes/${mealId}`).then(r => r.data)
   },
+  // Ingredients du frigo qu'utilise une recette : recipeKey = "mealdb:<id>" ou "perso:<id>"
+  getFridgeUsage(recipeKey) {
+    return client.get('/recipes/fridge-usage', { params: { recipe: recipeKey } }).then(r => r.data)
+  },
 
   // Recettes perso (eventuellement Thermomix)
   getMyRecipes() {

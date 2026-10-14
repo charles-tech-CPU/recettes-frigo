@@ -37,7 +37,7 @@
       :class="{ opening: opening === `${r.source}:${r.id}` }"
       @click="openDetail(r)"
     >
-      <FavoriteButton overlay :recipe="{ key: `${r.source}:${r.id}`, title: r.title, imageUrl: r.thumbnailUrl }" />
+      <FavoriteButton on-card :recipe="{ key: `${r.source}:${r.id}`, title: r.title, imageUrl: r.thumbnailUrl }" />
       <img v-if="r.thumbnailUrl" :src="r.thumbnailUrl" :alt="r.title" />
       <div v-else class="no-image"><CategoryIcon name="autres" /></div>
       <div class="content">
@@ -57,7 +57,7 @@
     </div>
   </div>
 
-  <RecipePanel v-if="detail" :recipe="detail" :missing="detailMissing" @close="detail = null" />
+  <RecipePanel v-if="detail" :recipe="detail" :missing="detailMissing" @close="detail = null" @fridge-changed="refreshFridge" />
 </template>
 
 <script setup>
@@ -116,6 +116,11 @@ function toggleFilter(key) {
   if (activeFilters.has(key)) activeFilters.delete(key)
   else activeFilters.add(key)
   router.replace({ query: activeFilters.size ? { filtre: [...activeFilters].join(',') } : {} })
+}
+
+// Apres "J'ai cuisine ca" : la mise en avant de ce qui perime suit le frigo
+async function refreshFridge() {
+  fridgeItems.value = await api.getFridgeItems().catch(() => fridgeItems.value)
 }
 
 async function load() {

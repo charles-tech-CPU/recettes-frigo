@@ -49,12 +49,15 @@
         <a v-if="recipe.sourceUrl" :href="recipe.sourceUrl" target="_blank" rel="noopener"><button type="button" class="secondary">Source</button></a>
       </div>
 
+      <CookedSection :recipe-key="recipe.key" @fridge-changed="emit('fridge-changed')" />
+
       <RecipeNotes :recipe-key="recipe.key" />
     </div>
   </div>
 </template>
 
 <script setup>
+import CookedSection from './CookedSection.vue'
 import FavoriteButton from './FavoriteButton.vue'
 import RecipeNotes from './RecipeNotes.vue'
 import { computed, ref } from 'vue'
@@ -67,7 +70,7 @@ const props = defineProps({
   // Noms des ingredients qui manquent dans le frigo (suggestions) ; null = inconnu
   missing: { type: Array, default: null }
 })
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'fridge-changed'])
 
 const addingToList = ref(false)
 const shoppingMessage = ref('')
