@@ -55,7 +55,10 @@ export const INGREDIENTS = {
     'Fromage', 'Fromage râpé', { name: 'Lait', unit: 'L' }, 'Mozzarella',
     { name: 'Œufs', unit: 'pièce' }, 'Parmesan', { name: 'Yaourt', unit: 'pièce' }
   ],
-  feculents: ['Chapelure', 'Farine', { name: 'Pain', unit: 'pièce' }, 'Pâtes', 'Riz', 'Spaghetti'],
+  feculents: [
+    'Chapelure', 'Farine', { name: 'Haricots blancs', unit: 'boîte' }, { name: 'Haricots rouges', unit: 'boîte' },
+    'Lentilles', { name: 'Pain', unit: 'pièce' }, 'Pâtes', { name: 'Pois chiches', unit: 'boîte' }, 'Riz', 'Spaghetti'
+  ],
   epicerie: [
     'Amandes', { name: 'Bouillon', unit: 'pièce' }, 'Chocolat', 'Concentré de tomate',
     { name: "Huile d'olive", unit: 'cl' }, { name: 'Huile', unit: 'cl' }, { name: 'Ketchup', unit: 'c. à soupe' },
@@ -88,11 +91,36 @@ export function formatQuantity(amount, unit) {
   if (amount === null || amount === undefined || amount === '') return null
   const number = Number(amount)
   const text = number.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+  if (!unit) return text
   const plural = number >= 2 && PLURAL_UNITS.includes(unit)
   return `${text} ${plural ? unit + 's' : unit}`
 }
 
 const PLURAL_UNITS = ['pièce', 'pincée', 'tranche', 'boîte', 'sachet', 'botte']
+
+// Pas d'un appui sur -/+ selon l'unite
+export const STEP_BY_UNIT = { g: 50, kg: 0.5, ml: 50, cl: 10, L: 0.5 }
+
+// Inverse de formatQuantity : "7 boîtes" -> { amount: 7, unit: 'boîte' }, "1,5 kg" -> { amount: 1.5, unit: 'kg' }.
+// null si la quantite ne commence pas par un nombre (vide, "un peu"...)
+export function parseQuantity(quantity) {
+  const match = /^(\d[\d\s]*(?:[.,]\d+)?)\s*(.*)$/.exec(quantity?.trim() ?? '')
+  if (!match) return null
+  const amount = Number(match[1].replace(/\s/g, '').replace(',', '.'))
+  if (Number.isNaN(amount)) return null
+  const singular = match[2].endsWith('s') ? match[2].slice(0, -1) : ''
+  const unit = PLURAL_UNITS.includes(singular) ? singular : match[2]
+  return { amount, unit }
+}
+
+// Quantite apres un appui sur -/+ : "7 boîtes" -> "6 boîtes" ; null si plus rien
+export function stepQuantity(quantity, direction) {
+  const parsed = parseQuantity(quantity)
+  if (!parsed) return quantity
+  const step = STEP_BY_UNIT[parsed.unit] ?? 1
+  const next = Math.round((parsed.amount + direction * step) * 100) / 100
+  return next > 0 ? formatQuantity(next, parsed.unit) : null
+}
 
 // Nom sans accents ni majuscules, pour comparer et rechercher ("Œufs" -> "oeufs")
 export function normalizeName(name) {

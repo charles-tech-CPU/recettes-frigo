@@ -46,7 +46,8 @@
 
   <AddIngredientForm :existing-items="items" @added="load" />
 
-  <p v-if="!items.length" class="empty-hint">Ton frigo est vide pour l'instant.</p>
+  <p v-if="error" class="error">{{ error }}</p>
+  <p v-else-if="loaded && !items.length" class="empty-hint">Ton frigo est vide pour l'instant.</p>
 
   <section
     v-for="section in sections"
@@ -65,7 +66,12 @@
         <div class="item-text">
           <div class="item-name">{{ item.name }}</div>
           <div v-if="item.quantity || (section.key === 'autres' && item.category)" class="item-meta">
-            <span v-if="item.quantity" class="item-quantity">{{ item.quantity }}</span>
+            <span v-if="parseQuantity(item.quantity)" class="item-stepper">
+              <button type="button" :aria-label="`Retirer un peu de ${item.name}`" :disabled="busyIds.has(item.id)" @click="changeQuantity(item, -1)">−</button>
+              <span class="item-quantity">{{ item.quantity }}</span>
+              <button type="button" :aria-label="`Ajouter un peu de ${item.name}`" :disabled="busyIds.has(item.id)" @click="changeQuantity(item, 1)">+</button>
+            </span>
+            <span v-else-if="item.quantity" class="item-quantity">{{ item.quantity }}</span>
             <span v-if="section.key === 'autres' && item.category">{{ item.category }}</span>
           </div>
         </div>
@@ -76,23 +82,58 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import AddIngredientForm from '../components/AddIngredientForm.vue'
 import CategoryIcon from '../components/CategoryIcon.vue'
 import { groupByCategory } from '../categories'
+import { parseQuantity, stepQuantity } from '../ingredients'
 
 const items = ref([])
+const loaded = ref(false)
+const error = ref('')
+// Ingredients dont la quantite est en cours d'enregistrement : evite deux -/+ partis de la meme valeur
+const busyIds = reactive(new Set())
 
 const sections = computed(() => groupByCategory(items.value))
 
 async function load() {
-  items.value = await api.getFridgeItems()
+  try {
+    items.value = await api.getFridgeItems()
+    error.value = ''
+  } catch {
+    error.value = 'Impossible de charger le frigo pour le moment.'
+  } finally {
+    loaded.value = true
+  }
 }
 
 async function remove(item) {
-  await api.deleteFridgeItem(item.id)
+  try {
+    await api.deleteFridgeItem(item.id)
+  } catch {
+    error.value = `Impossible de retirer « ${item.name} ».`
+    return
+  }
   await load()
+}
+
+// -/+ sur la quantite : arrive a zero, l'ingredient est retire du frigo
+async function changeQuantity(item, direction) {
+  const quantity = stepQuantity(item.quantity, direction)
+  if (quantity === null) {
+    await remove(item)
+    return
+  }
+  busyIds.add(item.id)
+  try {
+    const updated = await api.updateFridgeItem(item.id, { name: item.name, quantity, category: item.category })
+    item.quantity = updated.quantity
+  } catch {
+    error.value = `Impossible de modifier la quantité de « ${item.name} ».`
+  } finally {
+    busyIds.delete(item.id)
+  }
 }
 
 onMounted(load)
@@ -158,6 +199,14 @@ onMounted(load)
   padding: 1px 8px; border-radius: 999px; font-weight: 600;
   background: color-mix(in srgb, var(--cat-color) 16%, #1a2330); color: var(--cat-color);
 }
+.item-stepper { display: inline-flex; align-items: center; gap: 6px; }
+.item-stepper button {
+  min-height: 34px; width: 34px; padding: 0; font-size: 18px; line-height: 1;
+  background: #22303f; border-color: #37485a; color: #e6ecf1;
+}
+.item-stepper button:disabled { opacity: 0.5; }
+.item-stepper button:hover { border-color: var(--cat-color); }
+.error { color: #ff6b6b; text-align: center; }
 .remove-btn {
   flex-shrink: 0; width: 48px; padding: 0;
   background: #22303f; border-color: #37485a; color: #9fb0c0;

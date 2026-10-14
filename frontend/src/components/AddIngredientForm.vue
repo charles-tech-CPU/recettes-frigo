@@ -26,6 +26,7 @@
       <input
         v-model="search"
         class="search"
+        maxlength="80"
         :placeholder="catalog.length ? `Rechercher ou saisir (ex: ${catalog[0].name})` : 'Nom de l\'ingrédient'"
       />
       <div class="chip-row" :style="{ '--cat-color': category.color }">
@@ -79,16 +80,13 @@ import { computed, ref } from 'vue'
 import api from '../services/api'
 import CategoryIcon from './CategoryIcon.vue'
 import { CATEGORIES } from '../categories'
-import { UNITS, defaultUnitOf, formatQuantity, ingredientsOf, normalizeName, sameIngredient } from '../ingredients'
+import { STEP_BY_UNIT, UNITS, defaultUnitOf, formatQuantity, ingredientsOf, normalizeName, sameIngredient } from '../ingredients'
 
 const props = defineProps({
   // Ingredients deja dans le frigo : grises dans la liste (le nom est unique en base)
   existingItems: { type: Array, required: true }
 })
 const emit = defineEmits(['added'])
-
-// Pas d'un appui sur -/+ selon l'unite
-const STEP_BY_UNIT = { g: 50, kg: 0.5, ml: 50, cl: 10, L: 0.5 }
 
 const categoryKey = ref(null)
 const search = ref('')
