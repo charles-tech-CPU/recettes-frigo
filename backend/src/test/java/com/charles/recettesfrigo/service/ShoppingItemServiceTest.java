@@ -48,7 +48,10 @@ class ShoppingItemServiceTest {
         when(shoppingItemRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
 
         List<ShoppingItemDto> added = service.addAll(new ShoppingItemsAddDto(List.of(
-                toAdd("tomate", "4"), toAdd(" Riz ", "500 g"), toAdd("Lait de coco", " "), toAdd("lait de coco", null))));
+                toAdd("tomate", "4"),
+                toAdd(" Riz ", "500 g"),
+                toAdd("Lait de coco", " "),
+                toAdd("lait de coco", null))));
 
         // "tomate" est deja a acheter ; le riz deja coche est a racheter ; le lait de coco n'est ajoute qu'une fois
         assertThat(added).extracting(ShoppingItemDto::name).containsExactly("Riz", "Lait de coco");

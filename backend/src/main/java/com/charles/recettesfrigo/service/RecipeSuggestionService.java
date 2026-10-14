@@ -192,7 +192,9 @@ public class RecipeSuggestionService {
     }
 
     private static List<String> ingredientNames(CustomRecipeDto recipe) {
-        return recipe.ingredients().stream().map(CustomRecipeDto.Ingredient::name).toList();
+        return recipe.ingredients().stream()
+                .map(CustomRecipeDto.Ingredient::name)
+                .toList();
     }
 
     private static List<FridgeItem> usedByCustomRecipe(List<String> ingredientNames, List<FridgeItem> fridgeItems) {
@@ -205,8 +207,8 @@ public class RecipeSuggestionService {
     private static List<FridgeItem> usedByMeal(
             List<RecipeDetailDto.IngredientLine> ingredients, List<FridgeItem> fridgeItems) {
         return fridgeItems.stream()
-                .filter(fridge -> ingredients.stream()
-                        .anyMatch(line -> matchesIngredient(line.ingredient(), fridge.getName())))
+                .filter(fridge ->
+                        ingredients.stream().anyMatch(line -> matchesIngredient(line.ingredient(), fridge.getName())))
                 .toList();
     }
 
@@ -260,7 +262,8 @@ public class RecipeSuggestionService {
     private static String singular(String word) {
         if (word.length() > 4 && word.endsWith("ies")) return word.substring(0, word.length() - 3) + "y";
         if (word.length() > 4 && word.endsWith("oes")) return word.substring(0, word.length() - 2);
-        if (word.length() > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.substring(0, word.length() - 1);
+        if (word.length() > 3 && word.endsWith("s") && !word.endsWith("ss"))
+            return word.substring(0, word.length() - 1);
         return word;
     }
 

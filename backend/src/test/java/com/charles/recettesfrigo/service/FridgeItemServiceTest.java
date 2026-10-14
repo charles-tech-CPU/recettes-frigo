@@ -86,7 +86,8 @@ class FridgeItemServiceTest {
 
     @Test
     void ajouterUnIngredientDejaPresentEchoueAvecUnMessageClair() {
-        when(fridgeItemRepository.findByNameIgnoreCase("tomate")).thenReturn(Optional.of(item(1L, "Tomate", "4", null)));
+        when(fridgeItemRepository.findByNameIgnoreCase("tomate"))
+                .thenReturn(Optional.of(item(1L, "Tomate", "4", null)));
 
         assertThatThrownBy(() -> fridgeItemService.create(new FridgeItemCreateDto(" tomate ", "1", null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -100,7 +101,9 @@ class FridgeItemServiceTest {
         when(fridgeItemRepository.findByNameIgnoreCase("Tomate")).thenReturn(Optional.of(tomate));
         when(fridgeItemRepository.save(any(FridgeItem.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThat(fridgeItemService.update(1L, new FridgeItemCreateDto("Tomate", "3", null, null)).quantity())
+        assertThat(fridgeItemService
+                        .update(1L, new FridgeItemCreateDto("Tomate", "3", null, null))
+                        .quantity())
                 .isEqualTo("3");
     }
 

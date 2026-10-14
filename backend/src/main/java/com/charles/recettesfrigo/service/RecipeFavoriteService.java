@@ -26,14 +26,19 @@ public class RecipeFavoriteService {
     /** Ajoute la recette aux favoris ; deja en favori, son titre et sa photo sont mis a jour. */
     public RecipeFavoriteDto add(RecipeFavoriteDto dto) {
         RecipeKeys.check(dto.recipeKey());
-        RecipeFavorite favorite = recipeFavoriteRepository.findById(dto.recipeKey()).orElseGet(() -> {
-            RecipeFavorite created = new RecipeFavorite();
-            created.setRecipeKey(dto.recipeKey());
-            created.setCreatedAt(OffsetDateTime.now());
-            return created;
-        });
+        RecipeFavorite favorite = recipeFavoriteRepository
+                .findById(dto.recipeKey())
+                .orElseGet(() -> {
+                    RecipeFavorite created = new RecipeFavorite();
+                    created.setRecipeKey(dto.recipeKey());
+                    created.setCreatedAt(OffsetDateTime.now());
+                    return created;
+                });
         favorite.setTitle(dto.title().trim());
-        favorite.setImageUrl(dto.imageUrl() == null || dto.imageUrl().isBlank() ? null : dto.imageUrl().trim());
+        favorite.setImageUrl(
+                dto.imageUrl() == null || dto.imageUrl().isBlank()
+                        ? null
+                        : dto.imageUrl().trim());
         return toDto(recipeFavoriteRepository.save(favorite));
     }
 
