@@ -44,6 +44,18 @@
     </div>
   </section>
 
+  <section v-if="expiringSoon.length" class="expiring">
+    <div class="expiring-head">
+      <h3>⏳ À consommer vite</h3>
+      <router-link to="/?filtre=peremption" class="expiring-link">Voir les recettes qui les utilisent →</router-link>
+    </div>
+    <div class="expiring-list">
+      <span v-for="item in expiringSoon" :key="item.id" class="expiring-chip" :class="expiryLevel(item.expiresOn)">
+        <strong>{{ item.name }}</strong> · {{ expiryLabel(item.expiresOn) }}
+      </span>
+    </div>
+  </section>
+
   <AddIngredientForm :existing-items="items" @added="load" />
 
   <p v-if="error" class="error">{{ error }}</p>
@@ -65,7 +77,7 @@
       <div v-for="item in section.items" :key="item.id" class="item-card">
         <div class="item-text">
           <div class="item-name">{{ item.name }}</div>
-          <div v-if="item.quantity || (section.key === 'autres' && item.category)" class="item-meta">
+          <div class="item-meta">
             <span v-if="parseQuantity(item.quantity)" class="item-stepper">
               <button type="button" :aria-label="`Retirer un peu de ${item.name}`" :disabled="busyIds.has(item.id)" @click="changeQuantity(item, -1)">−</button>
               <span class="item-quantity">{{ item.quantity }}</span>
@@ -73,6 +85,25 @@
             </span>
             <span v-else-if="item.quantity" class="item-quantity">{{ item.quantity }}</span>
             <span v-if="section.key === 'autres' && item.category">{{ item.category }}</span>
+            <span v-if="editingExpiryId === item.id" class="expiry-edit">
+              <input
+                type="date"
+                :value="item.expiresOn ?? ''"
+                :aria-label="`Date de péremption de ${item.name}`"
+                @change="setExpiry(item, $event.target.value || null)"
+              />
+              <button v-if="item.expiresOn" type="button" class="expiry-clear" @click="setExpiry(item, null)">Sans date</button>
+            </span>
+            <button
+              v-else
+              type="button"
+              class="expiry-badge"
+              :class="expiryLevel(item.expiresOn)"
+              :aria-label="`Date de péremption de ${item.name}`"
+              @click="editingExpiryId = item.id"
+            >
+              {{ item.expiresOn ? expiryLabel(item.expiresOn) : '📅' }}
+            </button>
           </div>
         </div>
         <button type="button" class="remove-btn" :aria-label="`Retirer ${item.name}`" @click="remove(item)">✕</button>
@@ -88,6 +119,7 @@ import AddIngredientForm from '../components/AddIngredientForm.vue'
 import CategoryIcon from '../components/CategoryIcon.vue'
 import { groupByCategory } from '../categories'
 import { parseQuantity, stepQuantity } from '../ingredients'
+import { daysUntil, expiryLabel, expiryLevel, isExpiringSoon } from '../expiry'
 
 const items = ref([])
 const loaded = ref(false)
@@ -95,7 +127,14 @@ const error = ref('')
 // Ingredients dont la quantite est en cours d'enregistrement : evite deux -/+ partis de la meme valeur
 const busyIds = reactive(new Set())
 
+// Ingredient dont la date de peremption est en cours de modification
+const editingExpiryId = ref(null)
+
 const sections = computed(() => groupByCategory(items.value))
+// Perimes ou perimant bientot, le plus urgent d'abord
+const expiringSoon = computed(() => items.value
+  .filter(isExpiringSoon)
+  .sort((a, b) => daysUntil(a.expiresOn) - daysUntil(b.expiresOn)))
 
 async function load() {
   try {
@@ -118,6 +157,25 @@ async function remove(item) {
   await load()
 }
 
+// Enregistre l'ingredient avec les champs modifies (le PUT remplace tout : on renvoie le reste tel quel)
+async function save(item, changes, errorMessage) {
+  busyIds.add(item.id)
+  try {
+    const updated = await api.updateFridgeItem(item.id, {
+      name: item.name,
+      quantity: item.quantity,
+      category: item.category,
+      expiresOn: item.expiresOn,
+      ...changes
+    })
+    Object.assign(item, updated)
+  } catch {
+    error.value = errorMessage
+  } finally {
+    busyIds.delete(item.id)
+  }
+}
+
 // -/+ sur la quantite : arrive a zero, l'ingredient est retire du frigo
 async function changeQuantity(item, direction) {
   const quantity = stepQuantity(item.quantity, direction)
@@ -125,15 +183,12 @@ async function changeQuantity(item, direction) {
     await remove(item)
     return
   }
-  busyIds.add(item.id)
-  try {
-    const updated = await api.updateFridgeItem(item.id, { name: item.name, quantity, category: item.category })
-    item.quantity = updated.quantity
-  } catch {
-    error.value = `Impossible de modifier la quantité de « ${item.name} ».`
-  } finally {
-    busyIds.delete(item.id)
-  }
+  await save(item, { quantity }, `Impossible de modifier la quantité de « ${item.name} ».`)
+}
+
+async function setExpiry(item, expiresOn) {
+  editingExpiryId.value = null
+  await save(item, { expiresOn }, `Impossible de modifier la date de « ${item.name} ».`)
 }
 
 onMounted(load)
@@ -194,7 +249,7 @@ onMounted(load)
 }
 .item-text { min-width: 0; }
 .item-name { font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
-.item-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; color: #9fb0c0; }
+.item-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; color: #9fb0c0; }
 .item-quantity {
   padding: 1px 8px; border-radius: 999px; font-weight: 600;
   background: color-mix(in srgb, var(--cat-color) 16%, #1a2330); color: var(--cat-color);
@@ -207,6 +262,30 @@ onMounted(load)
 .item-stepper button:disabled { opacity: 0.5; }
 .item-stepper button:hover { border-color: var(--cat-color); }
 .error { color: #ff6b6b; text-align: center; }
+
+/* A consommer vite */
+.expiring {
+  margin-bottom: 18px; padding: 14px 16px; border-radius: 14px;
+  background: #2e2416; border: 1px solid #6b4f1d;
+}
+.expiring-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.expiring-head h3 { margin: 0 0 10px; font-size: 17px; }
+.expiring-link { font-size: 14px; font-weight: 600; color: #fbbf24; }
+.expiring-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.expiring-chip { padding: 6px 12px; border-radius: 999px; font-size: 14px; background: #3d2f17; color: #fde68a; }
+.expiring-chip.expired { background: #4a1f1f; color: #fca5a5; }
+
+/* Date de peremption sur une carte */
+.expiry-badge {
+  min-height: 28px; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 1px dashed #37485a; color: #9fb0c0;
+}
+.expiry-badge.ok { border-style: solid; }
+.expiry-badge.soon { border: 1px solid #b45309; background: #3d2f17; color: #fbbf24; }
+.expiry-badge.expired { border: 1px solid #b91c1c; background: #4a1f1f; color: #fca5a5; }
+.expiry-edit { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.expiry-edit input { min-height: 34px; padding: 4px 8px; font-size: 14px; width: auto; }
+.expiry-clear { min-height: 34px; padding: 4px 10px; font-size: 13px; background: #22303f; border-color: #37485a; }
 .remove-btn {
   flex-shrink: 0; width: 48px; padding: 0;
   background: #22303f; border-color: #37485a; color: #9fb0c0;

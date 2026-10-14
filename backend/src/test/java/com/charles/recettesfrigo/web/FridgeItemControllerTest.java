@@ -21,7 +21,7 @@ class FridgeItemControllerTest {
 
     @Test
     void chaqueRouteDelegueAuService() {
-        FridgeItemCreateDto dto = new FridgeItemCreateDto("Poulet", "2", "Viande");
+        FridgeItemCreateDto dto = new FridgeItemCreateDto("Poulet", "2", "Viande", null);
 
         controller.findAll();
         controller.create(dto);

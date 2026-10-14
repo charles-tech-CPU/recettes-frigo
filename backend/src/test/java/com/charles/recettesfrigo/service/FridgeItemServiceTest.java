@@ -49,7 +49,7 @@ class FridgeItemServiceTest {
     void ajouterUnIngredientNettoieLeNom() {
         when(fridgeItemRepository.save(any(FridgeItem.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        FridgeItemDto dto = fridgeItemService.create(new FridgeItemCreateDto("  Tomate ", "4", "Legumes"));
+        FridgeItemDto dto = fridgeItemService.create(new FridgeItemCreateDto("  Tomate ", "4", "Legumes", null));
 
         assertThat(dto.name()).isEqualTo("Tomate");
         assertThat(dto.quantity()).isEqualTo("4");
@@ -61,7 +61,7 @@ class FridgeItemServiceTest {
         when(fridgeItemRepository.findById(1L)).thenReturn(Optional.of(item(1L, "Poulet", "2", "Viande")));
         when(fridgeItemRepository.save(any(FridgeItem.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        FridgeItemDto dto = fridgeItemService.update(1L, new FridgeItemCreateDto("Poulet", "1", null));
+        FridgeItemDto dto = fridgeItemService.update(1L, new FridgeItemCreateDto("Poulet", "1", null, null));
 
         assertThat(dto.id()).isEqualTo(1L);
         assertThat(dto.quantity()).isEqualTo("1");
@@ -72,7 +72,7 @@ class FridgeItemServiceTest {
     void modifierUnIngredientInconnuEchoue() {
         when(fridgeItemRepository.findById(9L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> fridgeItemService.update(9L, new FridgeItemCreateDto("X", null, null)))
+        assertThatThrownBy(() -> fridgeItemService.update(9L, new FridgeItemCreateDto("X", null, null, null)))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("9");
     }
@@ -88,7 +88,7 @@ class FridgeItemServiceTest {
     void ajouterUnIngredientDejaPresentEchoueAvecUnMessageClair() {
         when(fridgeItemRepository.findByNameIgnoreCase("tomate")).thenReturn(Optional.of(item(1L, "Tomate", "4", null)));
 
-        assertThatThrownBy(() -> fridgeItemService.create(new FridgeItemCreateDto(" tomate ", "1", null)))
+        assertThatThrownBy(() -> fridgeItemService.create(new FridgeItemCreateDto(" tomate ", "1", null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Tomate");
     }
@@ -100,7 +100,17 @@ class FridgeItemServiceTest {
         when(fridgeItemRepository.findByNameIgnoreCase("Tomate")).thenReturn(Optional.of(tomate));
         when(fridgeItemRepository.save(any(FridgeItem.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThat(fridgeItemService.update(1L, new FridgeItemCreateDto("Tomate", "3", null)).quantity())
+        assertThat(fridgeItemService.update(1L, new FridgeItemCreateDto("Tomate", "3", null, null)).quantity())
                 .isEqualTo("3");
+    }
+
+    @Test
+    void laDateDePeremptionEstEnregistree() {
+        when(fridgeItemRepository.save(any(FridgeItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FridgeItemDto dto = fridgeItemService.create(
+                new FridgeItemCreateDto("Yaourt", "4 pièces", null, java.time.LocalDate.of(2026, 10, 20)));
+
+        assertThat(dto.expiresOn()).isEqualTo(java.time.LocalDate.of(2026, 10, 20));
     }
 }

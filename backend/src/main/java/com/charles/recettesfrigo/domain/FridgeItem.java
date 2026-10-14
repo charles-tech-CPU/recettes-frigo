@@ -1,6 +1,7 @@
 package com.charles.recettesfrigo.domain;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -32,4 +33,8 @@ public class FridgeItem {
     /** Categorie libre pour organiser l'affichage (ex: "Legumes", "Viande"). */
     @Column(length = 40)
     private String category;
+
+    /** Date de peremption, optionnelle. */
+    @Column(name = "expires_on")
+    private LocalDate expiresOn;
 }

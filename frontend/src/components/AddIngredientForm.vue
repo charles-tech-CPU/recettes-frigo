@@ -67,6 +67,10 @@
         <select v-model="unit" class="unit" aria-label="Unité">
           <option v-for="u in UNITS" :key="u.value" :value="u.value">{{ u.label }}</option>
         </select>
+        <label class="expiry-field">
+          <span>Périme le <small>(optionnel)</small></span>
+          <input v-model="expiresOn" type="date" />
+        </label>
         <button type="submit" class="submit" :disabled="saving">+ Ajouter {{ name }}</button>
       </div>
     </template>
@@ -93,6 +97,7 @@ const search = ref('')
 const name = ref('')
 const amount = ref('')
 const unit = ref('pièce')
+const expiresOn = ref('')
 const error = ref('')
 const saving = ref(false)
 
@@ -148,12 +153,14 @@ async function submit() {
     await api.createFridgeItem({
       name: name.value,
       quantity: formatQuantity(amount.value, unit.value),
-      category: categoryKey.value === 'autres' ? null : category.value.label
+      category: categoryKey.value === 'autres' ? null : category.value.label,
+      expiresOn: expiresOn.value || null
     })
     // On garde la categorie choisie : on ajoute souvent plusieurs legumes d'affilee
     search.value = ''
     name.value = ''
     amount.value = ''
+    expiresOn.value = ''
     emit('added')
   } catch (e) {
     error.value = e.response?.data?.error ?? "Erreur lors de l'ajout (cet ingrédient existe peut-être déjà)."
@@ -212,6 +219,8 @@ async function submit() {
 .stepper button { width: 48px; padding: 0; font-size: 22px; }
 .stepper input { width: 96px; text-align: center; }
 .unit { width: auto; min-width: 140px; }
+.expiry-field { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #9fb0c0; }
+.expiry-field input { width: auto; }
 .submit { margin-left: auto; }
 .submit:disabled { opacity: 0.6; }
 

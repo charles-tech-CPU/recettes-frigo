@@ -19,7 +19,7 @@ public class FridgeItemService {
 
     public List<FridgeItemDto> findAll() {
         return fridgeItemRepository.findAllByOrderByCategoryAscNameAsc().stream()
-                .map(this::toDto)
+                .map(FridgeItemService::toDto)
                 .toList();
     }
 
@@ -57,9 +57,11 @@ public class FridgeItemService {
         item.setName(dto.name().trim());
         item.setQuantity(dto.quantity());
         item.setCategory(dto.category());
+        item.setExpiresOn(dto.expiresOn());
     }
 
-    private FridgeItemDto toDto(FridgeItem item) {
-        return new FridgeItemDto(item.getId(), item.getName(), item.getQuantity(), item.getCategory());
+    static FridgeItemDto toDto(FridgeItem item) {
+        return new FridgeItemDto(
+                item.getId(), item.getName(), item.getQuantity(), item.getCategory(), item.getExpiresOn());
     }
 }

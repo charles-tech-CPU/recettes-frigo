@@ -22,8 +22,10 @@ class RecipeControllerTest {
     void chaqueRouteDelegueAuService() {
         controller.suggestions(12);
         controller.detail("52772");
+        controller.fridgeUsage("perso:3");
 
         verify(recipeSuggestionService).suggestFromFridge(12);
         verify(recipeSuggestionService).findDetail("52772");
+        verify(recipeSuggestionService).fridgeItemsUsedBy("perso:3");
     }
 }

@@ -6,14 +6,11 @@ import com.charles.recettesfrigo.dto.RecipeNoteDto;
 import com.charles.recettesfrigo.repository.RecipeNoteRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /** Notes libres sur une recette TheMealDB ("mealdb:<idMeal>") ou perso ("perso:<id>"). */
 @Service
 public class RecipeNoteService {
-
-    private static final Pattern RECIPE_KEY = Pattern.compile("(mealdb|perso):\\d{1,18}");
 
     private final RecipeNoteRepository recipeNoteRepository;
 
@@ -22,14 +19,14 @@ public class RecipeNoteService {
     }
 
     public List<RecipeNoteDto> findByRecipe(String recipeKey) {
-        checkKey(recipeKey);
+        RecipeKeys.check(recipeKey);
         return recipeNoteRepository.findByRecipeKeyOrderByCreatedAtAsc(recipeKey).stream()
                 .map(RecipeNoteService::toDto)
                 .toList();
     }
 
     public RecipeNoteDto create(RecipeNoteCreateDto dto) {
-        checkKey(dto.recipeKey());
+        RecipeKeys.check(dto.recipeKey());
         RecipeNote note = new RecipeNote();
         note.setRecipeKey(dto.recipeKey());
         note.setContent(dto.content().trim());
@@ -39,12 +36,6 @@ public class RecipeNoteService {
 
     public void delete(Long id) {
         recipeNoteRepository.deleteById(id);
-    }
-
-    private static void checkKey(String recipeKey) {
-        if (recipeKey == null || !RECIPE_KEY.matcher(recipeKey).matches()) {
-            throw new IllegalArgumentException("Recette inconnue: " + recipeKey);
-        }
     }
 
     private static RecipeNoteDto toDto(RecipeNote note) {

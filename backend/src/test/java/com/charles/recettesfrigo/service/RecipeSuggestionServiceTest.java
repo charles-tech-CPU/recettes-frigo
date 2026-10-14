@@ -50,6 +50,12 @@ class RecipeSuggestionServiceTest {
         return item;
     }
 
+    private static FridgeItem item(long id, String name) {
+        FridgeItem item = item(name);
+        item.setId(id);
+        return item;
+    }
+
     private static MealSummary summary(String id, String title) {
         return new MealSummary(id, title, "https://img/" + id + ".jpg");
     }
@@ -240,5 +246,43 @@ class RecipeSuggestionServiceTest {
         assertThat(RecipeSuggestionService.matchesIngredient("Oxtail", "Ail")).isFalse();
         assertThat(RecipeSuggestionService.matchesIngredient("Mussels", "Sel")).isFalse();
         assertThat(RecipeSuggestionService.matchesIngredient("Pineapple", "Pomme")).isFalse();
+    }
+
+    @Test
+    void lesIngredientsDuFrigoUtilisesParUneRecetteTheMealDb() {
+        when(fridgeItemRepository.findAllByOrderByCategoryAscNameAsc())
+                .thenReturn(List.of(item(1L, "Poulet"), item(2L, "Riz"), item(3L, "Ail")));
+        when(client.lookupById("52772"))
+                .thenReturn(Map.of("strIngredient1", "Chicken Breast", "strIngredient2", "Oxtail"));
+
+        assertThat(service.fridgeItemsUsedBy("mealdb:52772"))
+                .extracting(com.charles.recettesfrigo.dto.FridgeItemDto::id)
+                .containsExactly(1L);
+    }
+
+    @Test
+    void lesIngredientsDuFrigoUtilisesParUneRecettePerso() {
+        when(fridgeItemRepository.findAllByOrderByCategoryAscNameAsc())
+                .thenReturn(List.of(item(1L, "Carottes"), item(2L, "Riz")));
+        when(customRecipeService.findById(4L)).thenReturn(myRecipe(4, "Soupe", false, "carotte rapée", "Cumin"));
+
+        assertThat(service.fridgeItemsUsedBy("perso:4"))
+                .extracting(com.charles.recettesfrigo.dto.FridgeItemDto::name)
+                .containsExactly("Carottes");
+    }
+
+    @Test
+    void lesSuggestionsIndiquentLesIngredientsDuFrigoUtilises() {
+        noTranslation();
+        when(fridgeItemRepository.findAll()).thenReturn(List.of(item(1L, "Poulet"), item(2L, "Riz")));
+        when(client.filterByIngredient(anyString())).thenReturn(List.of(summary("1", "Curry")));
+        when(client.lookupById("1")).thenReturn(Map.of("strMeal", "Curry", "strIngredient1", "Chicken"));
+
+        assertThat(service.suggestFromFridge(12).get(0).usedFridgeItemIds()).containsExactly(1L);
+    }
+
+    @Test
+    void uneCleDeRecetteInvalideEstRefuseePourLUsageDuFrigo() {
+        assertThatThrownBy(() -> service.fridgeItemsUsedBy("autre:1")).isInstanceOf(IllegalArgumentException.class);
     }
 }

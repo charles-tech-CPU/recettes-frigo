@@ -82,6 +82,15 @@ export function ingredientsOf(categoryKey) {
     .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
 }
 
+// Entree du catalogue pour un nom saisi ("tomates" -> Tomates, legumes, piece), null si hors catalogue
+export function catalogEntry(name) {
+  for (const categoryKey of Object.keys(INGREDIENTS)) {
+    const entry = ingredientsOf(categoryKey).find(i => sameIngredient(i.name, name))
+    if (entry) return { ...entry, categoryKey }
+  }
+  return null
+}
+
 export function defaultUnitOf(categoryKey) {
   return DEFAULT_UNIT_BY_CATEGORY[categoryKey] ?? 'pièce'
 }

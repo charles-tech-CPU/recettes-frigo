@@ -1,5 +1,6 @@
 package com.charles.recettesfrigo.web;
 
+import com.charles.recettesfrigo.dto.FridgeItemDto;
 import com.charles.recettesfrigo.dto.RecipeDetailDto;
 import com.charles.recettesfrigo.dto.RecipeSuggestionDto;
 import com.charles.recettesfrigo.service.RecipeSuggestionService;
@@ -19,6 +20,12 @@ public class RecipeController {
     @GetMapping("/suggestions")
     public List<RecipeSuggestionDto> suggestions(@RequestParam(defaultValue = "12") int limit) {
         return recipeSuggestionService.suggestFromFridge(limit);
+    }
+
+    /** Ingredients du frigo qu'utilise une recette : recipe = "mealdb:<idMeal>" ou "perso:<id>". */
+    @GetMapping("/fridge-usage")
+    public List<FridgeItemDto> fridgeUsage(@RequestParam("recipe") String recipeKey) {
+        return recipeSuggestionService.fridgeItemsUsedBy(recipeKey);
     }
 
     @GetMapping("/{mealId}")

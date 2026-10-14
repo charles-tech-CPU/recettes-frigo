@@ -7,14 +7,31 @@
     Tes recettes et celles de TheMealDB, classées par nombre d'ingrédients de ton frigo qu'elles utilisent.
   </p>
 
+  <div v-if="suggestions.length" class="filters">
+    <button
+      v-for="f in FILTERS"
+      :key="f.key"
+      type="button"
+      class="filter-chip"
+      :class="{ active: activeFilters.has(f.key) }"
+      :aria-pressed="activeFilters.has(f.key)"
+      @click="toggleFilter(f.key)"
+    >
+      {{ f.label }}
+    </button>
+  </div>
+
   <p v-if="error" style="color:#ff6b6b">{{ error }}</p>
   <p v-if="!loading && !error && !suggestions.length" class="empty-hint">
     Aucune suggestion pour l'instant — ajoute des ingrédients dans "Mon frigo", ou réessaie.
   </p>
+  <p v-else-if="!loading && suggestions.length && !visible.length" class="empty-hint">
+    Aucune recette ne correspond à ces filtres.
+  </p>
 
   <div class="recipe-grid">
     <div
-      v-for="r in suggestions"
+      v-for="r in visible"
       :key="`${r.source}:${r.id}`"
       class="recipe-card"
       :class="{ opening: opening === `${r.source}:${r.id}` }"
@@ -28,6 +45,7 @@
           <span v-if="r.source === 'perso'" class="mine-badge">Ma recette</span>
           <span v-if="r.thermomix" class="tm-badge">Thermomix</span>
         </div>
+        <div v-if="expiringNames(r).length" class="expiring-uses">⏳ Écoule : {{ expiringNames(r).join(', ') }}</div>
         <div class="title">{{ r.title }}</div>
         <div v-if="opening === `${r.source}:${r.id}`" class="opening-hint">Ouverture de la recette…</div>
         <div v-if="r.missingIngredients.length" class="missing">
@@ -42,24 +60,65 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 import CategoryIcon from '../components/CategoryIcon.vue'
 import RecipePanel from '../components/RecipePanel.vue'
 import { fromCustom, fromMealDb } from '../recipes'
+import { daysUntil, isExpiringSoon } from '../expiry'
 
+// Filtres cumulables ; ?filtre=a,b dans l'adresse (lien "A consommer vite" du frigo)
+const FILTERS = [
+  { key: 'peremption', label: '⏳ Écoule ce qui périme', test: r => expiringNames(r).length > 0 }
+]
+
+const route = useRoute()
+const router = useRouter()
 const suggestions = ref([])
+const fridgeItems = ref([])
+const activeFilters = reactive(new Set(String(route.query.filtre ?? '').split(',').filter(key => FILTERS.some(f => f.key === key))))
 const detail = ref(null)
 const loading = ref(false)
 const error = ref('')
 // Recette en cours d'ouverture ("source:id") : une seule a la fois
 const opening = ref(null)
 
+// Ingredients du frigo perimes ou perimant bientot, par id
+const expiringById = computed(() => new Map(fridgeItems.value.filter(isExpiringSoon).map(i => [i.id, i])))
+
+function expiringNames(suggestion) {
+  return suggestion.usedFridgeItemIds
+    .map(id => expiringById.value.get(id))
+    .filter(Boolean)
+    .sort((a, b) => daysUntil(a.expiresOn) - daysUntil(b.expiresOn))
+    .map(i => i.name)
+}
+
+// Les recettes qui ecoulent ce qui perime passent devant (tri stable : l'ordre du serveur reste sinon)
+const visible = computed(() => suggestions.value
+  .filter(r => FILTERS.every(f => !activeFilters.has(f.key) || f.test(r)))
+  .map(r => ({ r, expiring: expiringNames(r).length }))
+  .sort((a, b) => b.expiring - a.expiring)
+  .map(({ r }) => r))
+
+function toggleFilter(key) {
+  if (activeFilters.has(key)) activeFilters.delete(key)
+  else activeFilters.add(key)
+  router.replace({ query: activeFilters.size ? { filtre: [...activeFilters].join(',') } : {} })
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    suggestions.value = await api.getSuggestions(12)
+    const [found, fridge] = await Promise.all([
+      api.getSuggestions(12),
+      // sans le frigo, on perd seulement la mise en avant de ce qui perime
+      api.getFridgeItems().catch(() => [])
+    ])
+    suggestions.value = found
+    fridgeItems.value = fridge
   } catch (e) {
     error.value = e.response?.data?.error ?? 'Impossible de récupérer des suggestions pour le moment.'
   } finally {
@@ -96,6 +155,13 @@ onMounted(load)
   background: linear-gradient(135deg, #1f3a2b, #1a2e45);
 }
 .no-image :deep(.category-icon) { width: 45%; height: 45%; }
+.expiring-uses { margin-top: 6px; font-size: 13px; font-weight: 600; color: #fbbf24; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.filter-chip {
+  min-height: 40px; padding: 6px 14px; border-radius: 999px; font-size: 14px;
+  background: #22303f; border-color: #37485a; color: #e6ecf1;
+}
+.filter-chip.active { background: #2b6cb0; border-color: #2b6cb0; font-weight: 700; }
 .recipe-card.opening { opacity: 0.7; cursor: progress; }
 .opening-hint { margin-top: 6px; font-size: 13px; color: #7fd0ff; }
 </style>

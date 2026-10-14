@@ -2,6 +2,7 @@ package com.charles.recettesfrigo.service;
 
 import com.charles.recettesfrigo.domain.FridgeItem;
 import com.charles.recettesfrigo.dto.CustomRecipeDto;
+import com.charles.recettesfrigo.dto.FridgeItemDto;
 import com.charles.recettesfrigo.dto.RecipeDetailDto;
 import com.charles.recettesfrigo.dto.RecipeSuggestionDto;
 import com.charles.recettesfrigo.repository.FridgeItemRepository;
@@ -47,9 +48,7 @@ public class RecipeSuggestionService {
         if (fridgeItems.isEmpty()) {
             return List.of();
         }
-        List<String> fridgeNames = fridgeItems.stream().map(FridgeItem::getName).toList();
-
-        List<RecipeSuggestionDto> suggestions = new ArrayList<>(customSuggestions(fridgeNames));
+        List<RecipeSuggestionDto> suggestions = new ArrayList<>(customSuggestions(fridgeItems));
         try {
             suggestions.addAll(mealDbSuggestions(fridgeItems, maxResults));
         } catch (IllegalStateException ex) {
@@ -65,22 +64,17 @@ public class RecipeSuggestionService {
     }
 
     /** Recettes perso utilisant au moins un ingredient du frigo (correspondance en francais). */
-    private List<RecipeSuggestionDto> customSuggestions(List<String> fridgeNames) {
+    private List<RecipeSuggestionDto> customSuggestions(List<FridgeItem> fridgeItems) {
         List<RecipeSuggestionDto> suggestions = new ArrayList<>();
         for (CustomRecipeDto recipe : customRecipeService.findAll()) {
-            List<String> ingredientNames = recipe.ingredients().stream()
-                    .map(CustomRecipeDto.Ingredient::name)
-                    .toList();
-            long matched = fridgeNames.stream()
-                    .filter(fridge -> ingredientNames.stream()
-                            .anyMatch(ingredient -> FrenchIngredientMatcher.matches(ingredient, fridge)))
-                    .count();
-            if (matched == 0) {
+            List<String> ingredientNames = ingredientNames(recipe);
+            List<FridgeItem> used = usedByCustomRecipe(ingredientNames, fridgeItems);
+            if (used.isEmpty()) {
                 continue;
             }
             List<String> missing = ingredientNames.stream()
-                    .filter(ingredient -> fridgeNames.stream()
-                            .noneMatch(fridge -> FrenchIngredientMatcher.matches(ingredient, fridge)))
+                    .filter(ingredient -> fridgeItems.stream()
+                            .noneMatch(fridge -> FrenchIngredientMatcher.matches(ingredient, fridge.getName())))
                     .toList();
             suggestions.add(new RecipeSuggestionDto(
                     String.valueOf(recipe.id()),
@@ -88,9 +82,10 @@ public class RecipeSuggestionService {
                     recipe.title(),
                     recipe.imageUrl(),
                     recipe.thermomix(),
-                    (int) matched,
+                    used.size(),
                     ingredientNames.size(),
-                    missing));
+                    missing,
+                    ids(used)));
         }
         return suggestions;
     }
@@ -171,9 +166,52 @@ public class RecipeSuggestionService {
                     false,
                     entry.getValue(),
                     allIngredients.size(),
-                    missing.stream().distinct().toList()));
+                    missing.stream().distinct().toList(),
+                    ids(usedByMeal(allIngredients, fridgeItems))));
         }
         return suggestions;
+    }
+
+    /** Ingredients du frigo qu'utilise une recette ("J'ai cuisine ca" : quoi retirer du frigo). */
+    public List<FridgeItemDto> fridgeItemsUsedBy(String recipeKey) {
+        RecipeKeys.check(recipeKey);
+        List<FridgeItem> fridgeItems = fridgeItemRepository.findAllByOrderByCategoryAscNameAsc();
+        List<FridgeItem> used;
+        if (RecipeKeys.isCustom(recipeKey)) {
+            CustomRecipeDto recipe = customRecipeService.findById(Long.valueOf(RecipeKeys.id(recipeKey)));
+            used = usedByCustomRecipe(ingredientNames(recipe), fridgeItems);
+        } else {
+            String mealId = RecipeKeys.id(recipeKey);
+            Map<String, Object> meal = client.lookupById(mealId);
+            if (meal == null) {
+                throw new EntityNotFoundException("Recette introuvable sur TheMealDB: " + mealId);
+            }
+            used = usedByMeal(MealIngredientParser.extract(meal), fridgeItems);
+        }
+        return used.stream().map(FridgeItemService::toDto).toList();
+    }
+
+    private static List<String> ingredientNames(CustomRecipeDto recipe) {
+        return recipe.ingredients().stream().map(CustomRecipeDto.Ingredient::name).toList();
+    }
+
+    private static List<FridgeItem> usedByCustomRecipe(List<String> ingredientNames, List<FridgeItem> fridgeItems) {
+        return fridgeItems.stream()
+                .filter(fridge -> ingredientNames.stream()
+                        .anyMatch(ingredient -> FrenchIngredientMatcher.matches(ingredient, fridge.getName())))
+                .toList();
+    }
+
+    private static List<FridgeItem> usedByMeal(
+            List<RecipeDetailDto.IngredientLine> ingredients, List<FridgeItem> fridgeItems) {
+        return fridgeItems.stream()
+                .filter(fridge -> ingredients.stream()
+                        .anyMatch(line -> matchesIngredient(line.ingredient(), fridge.getName())))
+                .toList();
+    }
+
+    private static List<Long> ids(List<FridgeItem> items) {
+        return items.stream().map(FridgeItem::getId).toList();
     }
 
     public RecipeDetailDto findDetail(String mealId) {
