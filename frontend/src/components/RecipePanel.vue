@@ -3,7 +3,10 @@
     <div class="panel recipe-panel">
       <div class="panel-header">
         <h2>{{ recipe.title }}</h2>
-        <button class="secondary" aria-label="Fermer" @click="emit('close')">✕</button>
+        <div class="header-actions">
+          <FavoriteButton :recipe="recipe" />
+          <button class="secondary" aria-label="Fermer" @click="emit('close')">✕</button>
+        </div>
       </div>
 
       <img v-if="recipe.imageUrl" :src="recipe.imageUrl" :alt="recipe.title" />
@@ -43,6 +46,7 @@
 </template>
 
 <script setup>
+import FavoriteButton from './FavoriteButton.vue'
 import RecipeNotes from './RecipeNotes.vue'
 import { formatTm } from '../recipes'
 
@@ -55,6 +59,7 @@ const emit = defineEmits(['close'])
 
 <style scoped>
 .panel-header h2 { margin: 0; }
+.header-actions { display: flex; gap: 8px; flex-shrink: 0; margin-left: 10px; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .tag {
   font-size: 12px; padding: 3px 10px; border-radius: 999px;

@@ -9,12 +9,37 @@
   </p>
 
   <p v-if="error" style="color:#ff6b6b">{{ error }}</p>
+
+  <section v-if="favorites.list.length" class="favorites">
+    <h3>♥ Mes favoris</h3>
+    <div class="recipe-grid">
+      <div
+        v-for="f in favorites.list"
+        :key="f.recipeKey"
+        class="recipe-card"
+        :class="{ opening: opening === f.recipeKey }"
+        @click="openFavorite(f)"
+      >
+        <FavoriteButton overlay :recipe="{ key: f.recipeKey, title: f.title, imageUrl: f.imageUrl }" />
+        <img v-if="f.imageUrl" :src="f.imageUrl" :alt="f.title" />
+        <div v-else class="no-image"><CategoryIcon name="autres" /></div>
+        <div class="content">
+          <div class="title">{{ f.title }}</div>
+          <div class="missing">
+            {{ opening === f.recipeKey ? 'Ouverture de la recette…' : f.recipeKey.startsWith('perso:') ? 'Ma recette' : 'TheMealDB' }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3 class="all-title">Toutes mes recettes</h3>
+  </section>
   <p v-if="loaded && !recipes.length" class="empty-hint">
     Aucune recette perso pour l'instant — crée la première avec "+ Nouvelle recette".
   </p>
 
   <div class="recipe-grid">
     <div v-for="r in recipes" :key="r.id" class="recipe-card" @click="detail = fromCustom(r)">
+      <FavoriteButton overlay :recipe="{ key: `perso:${r.id}`, title: r.title, imageUrl: r.imageUrl }" />
       <img v-if="r.imageUrl" :src="r.imageUrl" :alt="r.title" />
       <div v-else class="no-image"><CategoryIcon name="autres" /></div>
       <div class="content">
@@ -32,7 +57,8 @@
 
   <RecipePanel v-if="detail" :recipe="detail" @close="detail = null">
     <template #actions>
-      <div class="panel-actions">
+      <!-- Modifier / supprimer : recettes perso seulement (un favori TheMealDB s'ouvre aussi ici) -->
+      <div v-if="detail.id" class="panel-actions">
         <router-link :to="`/mes-recettes/${detail.id}`"><button type="button" class="secondary">✎ Modifier</button></router-link>
         <button type="button" class="danger" @click="remove(detail)">
           {{ detail.confirmDelete ? 'Confirmer la suppression ?' : 'Supprimer' }}
@@ -46,13 +72,18 @@
 import { onMounted, ref } from 'vue'
 import api from '../services/api'
 import CategoryIcon from '../components/CategoryIcon.vue'
+import FavoriteButton from '../components/FavoriteButton.vue'
 import RecipePanel from '../components/RecipePanel.vue'
-import { formatDuration, fromCustom } from '../recipes'
+import { formatDuration, fromCustom, fromMealDb } from '../recipes'
+import { useFavorites } from '../favorites'
 
 const recipes = ref([])
 const detail = ref(null)
 const loaded = ref(false)
 const error = ref('')
+const { favorites } = useFavorites()
+// Favori en cours d'ouverture (recipeKey) : une recette TheMealDB est rechargee et traduite
+const opening = ref(null)
 
 async function load() {
   try {
@@ -82,6 +113,22 @@ async function remove(recipe) {
   await load()
 }
 
+async function openFavorite(favorite) {
+  if (opening.value) return
+  opening.value = favorite.recipeKey
+  error.value = ''
+  const [source, id] = favorite.recipeKey.split(':')
+  try {
+    detail.value = source === 'perso'
+      ? fromCustom(await api.getMyRecipe(id))
+      : fromMealDb(await api.getRecipeDetail(id))
+  } catch (e) {
+    error.value = e.response?.data?.error ?? 'Impossible de récupérer cette recette.'
+  } finally {
+    opening.value = null
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -96,4 +143,7 @@ onMounted(load)
 }
 .no-image :deep(.category-icon) { width: 45%; height: 45%; }
 .panel-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0 4px; }
+.favorites h3 { margin: 18px 0 0; }
+.favorites .all-title { margin-top: 28px; }
+.recipe-card.opening { opacity: 0.7; cursor: progress; }
 </style>

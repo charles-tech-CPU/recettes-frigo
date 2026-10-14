@@ -5,6 +5,7 @@ import com.charles.recettesfrigo.domain.CustomRecipeIngredient;
 import com.charles.recettesfrigo.domain.CustomRecipeStep;
 import com.charles.recettesfrigo.dto.CustomRecipeDto;
 import com.charles.recettesfrigo.repository.CustomRecipeRepository;
+import com.charles.recettesfrigo.repository.RecipeFavoriteRepository;
 import com.charles.recettesfrigo.repository.RecipeNoteRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
@@ -17,11 +18,15 @@ public class CustomRecipeService {
 
     private final CustomRecipeRepository customRecipeRepository;
     private final RecipeNoteRepository recipeNoteRepository;
+    private final RecipeFavoriteRepository recipeFavoriteRepository;
 
     public CustomRecipeService(
-            CustomRecipeRepository customRecipeRepository, RecipeNoteRepository recipeNoteRepository) {
+            CustomRecipeRepository customRecipeRepository,
+            RecipeNoteRepository recipeNoteRepository,
+            RecipeFavoriteRepository recipeFavoriteRepository) {
         this.customRecipeRepository = customRecipeRepository;
         this.recipeNoteRepository = recipeNoteRepository;
+        this.recipeFavoriteRepository = recipeFavoriteRepository;
     }
 
     @Transactional(readOnly = true)
@@ -48,14 +53,20 @@ public class CustomRecipeService {
     public CustomRecipeDto update(Long id, CustomRecipeDto dto) {
         CustomRecipe recipe = get(id);
         apply(recipe, dto);
+        // Le favori garde le titre et la photo pour s'afficher : on les tient a jour
+        recipeFavoriteRepository.findById("perso:" + id).ifPresent(favorite -> {
+            favorite.setTitle(recipe.getTitle());
+            favorite.setImageUrl(recipe.getImageUrl());
+        });
         return toDto(customRecipeRepository.save(recipe));
     }
 
-    /** Supprime aussi les notes de la recette (pas de cle etrangere sur recipe_note). */
+    /** Supprime aussi ses notes et son favori (pas de cle etrangere sur recipe_note ni recipe_favorite). */
     @Transactional
     public void delete(Long id) {
         customRecipeRepository.deleteById(id);
         recipeNoteRepository.deleteByRecipeKey("perso:" + id);
+        recipeFavoriteRepository.deleteById("perso:" + id);
     }
 
     private CustomRecipe get(Long id) {

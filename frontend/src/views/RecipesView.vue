@@ -37,6 +37,7 @@
       :class="{ opening: opening === `${r.source}:${r.id}` }"
       @click="openDetail(r)"
     >
+      <FavoriteButton overlay :recipe="{ key: `${r.source}:${r.id}`, title: r.title, imageUrl: r.thumbnailUrl }" />
       <img v-if="r.thumbnailUrl" :src="r.thumbnailUrl" :alt="r.title" />
       <div v-else class="no-image"><CategoryIcon name="autres" /></div>
       <div class="content">
@@ -64,15 +65,22 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 import CategoryIcon from '../components/CategoryIcon.vue'
+import FavoriteButton from '../components/FavoriteButton.vue'
 import RecipePanel from '../components/RecipePanel.vue'
 import { fromCustom, fromMealDb } from '../recipes'
 import { daysUntil, isExpiringSoon } from '../expiry'
+import { useFavorites } from '../favorites'
 
 // Filtres cumulables ; ?filtre=a,b dans l'adresse (lien "A consommer vite" du frigo)
 const FILTERS = [
+  { key: 'complet', label: "✓ J'ai tout", test: r => !r.missingIngredients.length },
+  { key: 'favoris', label: '♥ Favoris', test: r => isFavorite(`${r.source}:${r.id}`) },
+  { key: 'perso', label: 'Mes recettes', test: r => r.source === 'perso' },
+  { key: 'thermomix', label: 'Thermomix', test: r => r.thermomix },
   { key: 'peremption', label: '⏳ Écoule ce qui périme', test: r => expiringNames(r).length > 0 }
 ]
 
+const { isFavorite } = useFavorites()
 const route = useRoute()
 const router = useRouter()
 const suggestions = ref([])

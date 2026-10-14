@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.charles.recettesfrigo.domain.CustomRecipe;
 import com.charles.recettesfrigo.dto.CustomRecipeDto;
 import com.charles.recettesfrigo.repository.CustomRecipeRepository;
+import com.charles.recettesfrigo.repository.RecipeFavoriteRepository;
 import com.charles.recettesfrigo.repository.RecipeNoteRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
@@ -27,6 +28,9 @@ class CustomRecipeServiceTest {
 
     @Mock
     private RecipeNoteRepository recipeNoteRepository;
+
+    @Mock
+    private RecipeFavoriteRepository recipeFavoriteRepository;
 
     @InjectMocks
     private CustomRecipeService service;
@@ -131,5 +135,6 @@ class CustomRecipeServiceTest {
 
         verify(customRecipeRepository).deleteById(4L);
         verify(recipeNoteRepository).deleteByRecipeKey("perso:4");
+        verify(recipeFavoriteRepository).deleteById("perso:4");
     }
 }

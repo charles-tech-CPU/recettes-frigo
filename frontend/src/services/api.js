@@ -62,5 +62,16 @@ export default {
   },
   deleteNote(id) {
     return client.delete(`/recipe-notes/${id}`)
+  },
+
+  // Favoris : { recipeKey, title, imageUrl }
+  getFavorites() {
+    return client.get('/favorites').then(r => r.data)
+  },
+  addFavorite(favorite) {
+    return client.post('/favorites', favorite).then(r => r.data)
+  },
+  removeFavorite(recipeKey) {
+    return client.delete('/favorites', { params: { recipe: recipeKey } })
   }
 }
