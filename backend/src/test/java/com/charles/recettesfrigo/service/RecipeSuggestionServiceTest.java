@@ -229,4 +229,16 @@ class RecipeSuggestionServiceTest {
 
         assertThatThrownBy(() -> service.findDetail("0")).isInstanceOf(EntityNotFoundException.class);
     }
+
+    @Test
+    void laCorrespondanceDesIngredientsSeFaitParMotsEntiers() {
+        assertThat(RecipeSuggestionService.matchesIngredient("Chicken Breast", "Poulet")).isTrue();
+        assertThat(RecipeSuggestionService.matchesIngredient("Tomato", "Tomates")).isTrue();
+        assertThat(RecipeSuggestionService.matchesIngredient("Black Pepper", "Poivre")).isTrue();
+        assertThat(RecipeSuggestionService.matchesIngredient("Kidney Beans", "Haricots rouges")).isTrue();
+
+        assertThat(RecipeSuggestionService.matchesIngredient("Oxtail", "Ail")).isFalse();
+        assertThat(RecipeSuggestionService.matchesIngredient("Mussels", "Sel")).isFalse();
+        assertThat(RecipeSuggestionService.matchesIngredient("Pineapple", "Pomme")).isFalse();
+    }
 }

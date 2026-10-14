@@ -83,4 +83,24 @@ class FridgeItemServiceTest {
 
         verify(fridgeItemRepository).deleteById(3L);
     }
+
+    @Test
+    void ajouterUnIngredientDejaPresentEchoueAvecUnMessageClair() {
+        when(fridgeItemRepository.findByNameIgnoreCase("tomate")).thenReturn(Optional.of(item(1L, "Tomate", "4", null)));
+
+        assertThatThrownBy(() -> fridgeItemService.create(new FridgeItemCreateDto(" tomate ", "1", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Tomate");
+    }
+
+    @Test
+    void modifierUnIngredientSansChangerSonNomEstAccepte() {
+        FridgeItem tomate = item(1L, "Tomate", "4", null);
+        when(fridgeItemRepository.findById(1L)).thenReturn(Optional.of(tomate));
+        when(fridgeItemRepository.findByNameIgnoreCase("Tomate")).thenReturn(Optional.of(tomate));
+        when(fridgeItemRepository.save(any(FridgeItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThat(fridgeItemService.update(1L, new FridgeItemCreateDto("Tomate", "3", null)).quantity())
+                .isEqualTo("3");
+    }
 }

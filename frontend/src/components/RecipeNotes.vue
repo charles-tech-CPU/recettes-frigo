@@ -66,7 +66,12 @@ async function add() {
 }
 
 async function remove(note) {
-  await api.deleteNote(note.id)
+  try {
+    await api.deleteNote(note.id)
+  } catch {
+    error.value = 'Impossible de supprimer la note.'
+    return
+  }
   await load()
 }
 

@@ -13,7 +13,13 @@
   </p>
 
   <div class="recipe-grid">
-    <div v-for="r in suggestions" :key="`${r.source}:${r.id}`" class="recipe-card" @click="openDetail(r)">
+    <div
+      v-for="r in suggestions"
+      :key="`${r.source}:${r.id}`"
+      class="recipe-card"
+      :class="{ opening: opening === `${r.source}:${r.id}` }"
+      @click="openDetail(r)"
+    >
       <img v-if="r.thumbnailUrl" :src="r.thumbnailUrl" :alt="r.title" />
       <div v-else class="no-image"><CategoryIcon name="autres" /></div>
       <div class="content">
@@ -23,6 +29,7 @@
           <span v-if="r.thermomix" class="tm-badge">Thermomix</span>
         </div>
         <div class="title">{{ r.title }}</div>
+        <div v-if="opening === `${r.source}:${r.id}`" class="opening-hint">Ouverture de la recette…</div>
         <div v-if="r.missingIngredients.length" class="missing">
           Manque : {{ r.missingIngredients.slice(0, 3).join(', ') }}<span v-if="r.missingIngredients.length > 3">...</span>
         </div>
@@ -45,6 +52,8 @@ const suggestions = ref([])
 const detail = ref(null)
 const loading = ref(false)
 const error = ref('')
+// Recette en cours d'ouverture ("source:id") : une seule a la fois
+const opening = ref(null)
 
 async function load() {
   loading.value = true
@@ -59,12 +68,17 @@ async function load() {
 }
 
 async function openDetail(suggestion) {
+  if (opening.value) return
+  opening.value = `${suggestion.source}:${suggestion.id}`
+  error.value = ''
   try {
     detail.value = suggestion.source === 'perso'
       ? fromCustom(await api.getMyRecipe(suggestion.id))
       : fromMealDb(await api.getRecipeDetail(suggestion.id))
   } catch (e) {
     error.value = e.response?.data?.error ?? 'Impossible de récupérer cette recette.'
+  } finally {
+    opening.value = null
   }
 }
 
@@ -82,4 +96,6 @@ onMounted(load)
   background: linear-gradient(135deg, #1f3a2b, #1a2e45);
 }
 .no-image :deep(.category-icon) { width: 45%; height: 45%; }
+.recipe-card.opening { opacity: 0.7; cursor: progress; }
+.opening-hint { margin-top: 6px; font-size: 13px; color: #7fd0ff; }
 </style>

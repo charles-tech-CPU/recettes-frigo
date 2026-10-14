@@ -96,9 +96,7 @@ public class RecipeSuggestionService {
     }
 
     private List<RecipeSuggestionDto> mealDbSuggestions(List<FridgeItem> fridgeItems, int maxResults) {
-        List<String> fridgeNamesLower = fridgeItems.stream()
-                .map(i -> i.getName().toLowerCase(Locale.FRENCH))
-                .toList();
+        List<String> fridgeNames = fridgeItems.stream().map(FridgeItem::getName).toList();
 
         Map<String, Integer> matchCountByMealId = new HashMap<>();
         Map<String, TheMealDbClient.MealSummary> summaryByMealId = new HashMap<>();
@@ -152,7 +150,7 @@ public class RecipeSuggestionService {
             List<String> missing = new ArrayList<>();
             for (int i = 0; i < allIngredients.size(); i++) {
                 String englishName = allIngredients.get(i).ingredient();
-                if (fridgeNamesLower.stream().noneMatch(fridgeName -> matchesIngredient(englishName, fridgeName))) {
+                if (fridgeNames.stream().noneMatch(fridgeName -> matchesIngredient(englishName, fridgeName))) {
                     missing.add(
                             french != null && i < french.ingredients().size()
                                     ? french.ingredients().get(i).ingredient()
@@ -197,12 +195,39 @@ public class RecipeSuggestionService {
                 french.translated());
     }
 
-    /** Correspondance approximative : traduction FR->EN de l'item du frigo, comparee par inclusion. */
-    private boolean matchesIngredient(String englishIngredientFromApi, String fridgeNameLower) {
-        String translated =
-                IngredientTranslations.toEnglishQueryTerm(fridgeNameLower).replace('_', ' ');
-        String apiLower = englishIngredientFromApi.toLowerCase(Locale.ENGLISH);
-        return apiLower.contains(translated) || translated.contains(apiLower) || apiLower.contains(fridgeNameLower);
+    /**
+     * Correspondance approximative : traduction FR->EN de l'item du frigo, comparee par mots
+     * entiers et au singulier ("Chicken Breast" contient "chicken", mais "Oxtail" ne contient
+     * pas "ail" ni "Pineapple" "apple").
+     */
+    static boolean matchesIngredient(String englishIngredientFromApi, String fridgeName) {
+        String api = words(englishIngredientFromApi);
+        String translated = words(IngredientTranslations.toEnglishQueryTerm(fridgeName));
+        String french = words(IngredientTranslations.normalize(fridgeName));
+        return containsWords(api, translated) || containsWords(translated, api) || containsWords(api, french);
+    }
+
+    /** "Chicken_Breasts" -> " chicken breast " : mots en minuscules, au singulier, entoures d'espaces. */
+    private static String words(String name) {
+        String[] parts = name.toLowerCase(Locale.ENGLISH).split("[^a-z0-9]+");
+        StringBuilder result = new StringBuilder(" ");
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                result.append(singular(part)).append(' ');
+            }
+        }
+        return result.toString();
+    }
+
+    private static String singular(String word) {
+        if (word.length() > 4 && word.endsWith("ies")) return word.substring(0, word.length() - 3) + "y";
+        if (word.length() > 4 && word.endsWith("oes")) return word.substring(0, word.length() - 2);
+        if (word.length() > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.substring(0, word.length() - 1);
+        return word;
+    }
+
+    private static boolean containsWords(String text, String searched) {
+        return !searched.isBlank() && text.contains(searched);
     }
 
     private String str(Object o) {

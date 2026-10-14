@@ -71,8 +71,14 @@ async function remove(recipe) {
     detail.value = { ...recipe, confirmDelete: true }
     return
   }
-  await api.deleteMyRecipe(recipe.id)
-  detail.value = null
+  try {
+    await api.deleteMyRecipe(recipe.id)
+  } catch {
+    error.value = `Impossible de supprimer « ${recipe.title} ».`
+    return
+  } finally {
+    detail.value = null
+  }
   await load()
 }
 

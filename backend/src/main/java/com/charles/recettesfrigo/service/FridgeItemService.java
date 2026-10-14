@@ -24,6 +24,7 @@ public class FridgeItemService {
     }
 
     public FridgeItemDto create(FridgeItemCreateDto dto) {
+        checkNotInFridge(dto.name(), null);
         FridgeItem item = new FridgeItem();
         apply(item, dto);
         return toDto(fridgeItemRepository.save(item));
@@ -33,12 +34,23 @@ public class FridgeItemService {
         FridgeItem item = fridgeItemRepository
                 .findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Ingredient introuvable: " + id));
+        checkNotInFridge(dto.name(), id);
         apply(item, dto);
         return toDto(fridgeItemRepository.save(item));
     }
 
     public void delete(Long id) {
         fridgeItemRepository.deleteById(id);
+    }
+
+    /** Le nom est unique en base : message clair plutot qu'une erreur 500 sur la contrainte. */
+    private void checkNotInFridge(String name, Long exceptId) {
+        fridgeItemRepository
+                .findByNameIgnoreCase(name.trim())
+                .filter(other -> !other.getId().equals(exceptId))
+                .ifPresent(other -> {
+                    throw new IllegalArgumentException("« " + other.getName() + " » est déjà dans le frigo.");
+                });
     }
 
     private void apply(FridgeItem item, FridgeItemCreateDto dto) {

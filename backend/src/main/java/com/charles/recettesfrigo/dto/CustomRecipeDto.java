@@ -2,6 +2,7 @@ package com.charles.recettesfrigo.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
@@ -13,8 +14,8 @@ public record CustomRecipeDto(
         Long id,
         @NotBlank @Size(max = 200) String title,
         @Size(max = 80) String category,
-        Integer servings,
-        Integer totalTimeMinutes,
+        @Positive Integer servings,
+        @Positive Integer totalTimeMinutes,
         boolean thermomix,
         @Size(max = 1000) String imageUrl,
         @Size(max = 1000) String sourceUrl,
