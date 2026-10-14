@@ -73,5 +73,23 @@ export default {
   },
   removeFavorite(recipeKey) {
     return client.delete('/favorites', { params: { recipe: recipeKey } })
+  },
+
+  // Liste de courses
+  getShoppingItems() {
+    return client.get('/shopping-items').then(r => r.data)
+  },
+  // items = [{ name, quantity, recipeTitle }] ; renvoie ceux reellement ajoutes (pas les doublons)
+  addShoppingItems(items) {
+    return client.post('/shopping-items', { items }).then(r => r.data)
+  },
+  checkShoppingItem(id, checked) {
+    return client.patch(`/shopping-items/${id}`, { checked }).then(r => r.data)
+  },
+  deleteShoppingItem(id) {
+    return client.delete(`/shopping-items/${id}`)
+  },
+  deleteCheckedShoppingItems() {
+    return client.delete('/shopping-items/checked')
   }
 }

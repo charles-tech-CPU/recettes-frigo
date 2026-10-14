@@ -6,6 +6,7 @@
       <router-link to="/">Recettes</router-link>
       <router-link to="/mes-recettes">Mes recettes</router-link>
       <router-link to="/frigo">Mon frigo</router-link>
+      <router-link to="/courses">Courses</router-link>
     </nav>
   </header>
   <main>

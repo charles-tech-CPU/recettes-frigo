@@ -25,6 +25,15 @@
       </div>
       <p v-if="!recipe.ingredients.length" class="muted">Aucun ingrédient renseigné.</p>
 
+      <div v-if="shoppingCandidates.length" class="shopping">
+        <button type="button" class="secondary" :disabled="addingToList" @click="addToShoppingList">
+          🛒 {{ missing ? `Ajouter ${shoppingCandidates.length > 1 ? `les ${shoppingCandidates.length} manquants` : 'le manquant'} à la liste de courses` : 'Ajouter les ingrédients à la liste de courses' }}
+        </button>
+        <p v-if="shoppingMessage" class="shopping-message">
+          {{ shoppingMessage }} <router-link to="/courses">Voir la liste →</router-link>
+        </p>
+      </div>
+
       <h3>Préparation</h3>
       <ol v-if="recipe.steps" class="steps">
         <li v-for="(step, i) in recipe.steps" :key="i">
@@ -48,17 +57,54 @@
 <script setup>
 import FavoriteButton from './FavoriteButton.vue'
 import RecipeNotes from './RecipeNotes.vue'
+import { computed, ref } from 'vue'
+import api from '../services/api'
 import { formatTm } from '../recipes'
 
-defineProps({
+const props = defineProps({
   // Recette au format de fromMealDb / fromCustom (src/recipes.js)
-  recipe: { type: Object, required: true }
+  recipe: { type: Object, required: true },
+  // Noms des ingredients qui manquent dans le frigo (suggestions) ; null = inconnu
+  missing: { type: Array, default: null }
 })
 const emit = defineEmits(['close'])
+
+const addingToList = ref(false)
+const shoppingMessage = ref('')
+
+// Ce qui part dans la liste de courses : les manquants si on les connait, sinon tous les ingredients
+const shoppingCandidates = computed(() => {
+  const names = props.missing ?? props.recipe.ingredients.map(i => i.name)
+  return names.map(name => {
+    const quantity = props.recipe.ingredients.find(i => i.name === name)?.quantity
+    return {
+      name: name.slice(0, 80),
+      quantity: quantity ? quantity.slice(0, 80) : null,
+      recipeTitle: props.recipe.title.slice(0, 300)
+    }
+  })
+})
+
+async function addToShoppingList() {
+  addingToList.value = true
+  shoppingMessage.value = ''
+  try {
+    const added = await api.addShoppingItems(shoppingCandidates.value)
+    shoppingMessage.value = added.length
+      ? `${added.length} article${added.length > 1 ? 's' : ''} ajouté${added.length > 1 ? 's' : ''}.`
+      : 'Tout est déjà dans la liste.'
+  } catch {
+    shoppingMessage.value = "Impossible d'ajouter à la liste de courses."
+  } finally {
+    addingToList.value = false
+  }
+}
 </script>
 
 <style scoped>
 .panel-header h2 { margin: 0; }
+.shopping { margin-top: 12px; }
+.shopping-message { margin: 8px 0 0; font-size: 14px; color: #4ade80; }
 .header-actions { display: flex; gap: 8px; flex-shrink: 0; margin-left: 10px; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .tag {

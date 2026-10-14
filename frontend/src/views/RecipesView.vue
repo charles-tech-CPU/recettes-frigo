@@ -57,7 +57,7 @@
     </div>
   </div>
 
-  <RecipePanel v-if="detail" :recipe="detail" @close="detail = null" />
+  <RecipePanel v-if="detail" :recipe="detail" :missing="detailMissing" @close="detail = null" />
 </template>
 
 <script setup>
@@ -87,6 +87,8 @@ const suggestions = ref([])
 const fridgeItems = ref([])
 const activeFilters = reactive(new Set(String(route.query.filtre ?? '').split(',').filter(key => FILTERS.some(f => f.key === key))))
 const detail = ref(null)
+// Ingredients manquants de la recette ouverte (pour la liste de courses)
+const detailMissing = ref(null)
 const loading = ref(false)
 const error = ref('')
 // Recette en cours d'ouverture ("source:id") : une seule a la fois
@@ -142,6 +144,7 @@ async function openDetail(suggestion) {
     detail.value = suggestion.source === 'perso'
       ? fromCustom(await api.getMyRecipe(suggestion.id))
       : fromMealDb(await api.getRecipeDetail(suggestion.id))
+    detailMissing.value = suggestion.missingIngredients
   } catch (e) {
     error.value = e.response?.data?.error ?? 'Impossible de récupérer cette recette.'
   } finally {
